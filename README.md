@@ -13,6 +13,8 @@
 
 Based on [Geoffrey Huntley's Ralph pattern](https://ghuntley.com/ralph/).
 
+> **Fork:** This project is a fork of [snarktank/ralph](https://github.com/snarktank/ralph).
+
 </div>
 
 ---
