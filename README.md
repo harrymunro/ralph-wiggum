@@ -168,7 +168,6 @@ Default is 10 iterations.
 | `progress.txt` | Append-only learnings for future iterations |
 | `skills/prd/` | Skill for generating PRDs |
 | `skills/ralph/` | Skill for converting PRDs to JSON |
-| `flowchart/` | Interactive visualization of how Ralph works |
 
 ---
 
@@ -210,20 +209,6 @@ Ralph only works if there are feedback loops:
 ### Stop Condition
 
 When all stories have `passes: true`, Ralph outputs `<promise>COMPLETE</promise>` and the loop exits.
-
----
-
-## Flowchart
-
-![Ralph Flowchart](ralph-flowchart.png)
-
-The `flowchart/` directory contains an interactive visualization. To run locally:
-
-```bash
-cd flowchart
-npm install
-npm run dev
-```
 
 ---
 
