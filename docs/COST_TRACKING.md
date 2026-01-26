@@ -77,31 +77,6 @@ claude usage --export > usage-report-$(date +%Y%m%d).json
 cat usage-report-*.json | jq '.total_cost'
 ```
 
-## Amp Usage Tracking
-
-Amp (Sourcegraph's AI assistant) tracks usage through Sourcegraph's dashboard:
-
-### Web Dashboard
-1. Navigate to your Sourcegraph instance
-2. Go to **Settings** → **Usage & Billing**
-3. View Amp usage by time period
-
-### CLI Tracking
-```bash
-# Check Amp usage via API (requires auth token)
-curl -H "Authorization: token $SRC_ACCESS_TOKEN" \
-  https://sourcegraph.com/.api/user/usage | jq '.'
-
-# Filter for Amp-specific usage
-curl -H "Authorization: token $SRC_ACCESS_TOKEN" \
-  https://sourcegraph.com/.api/user/usage | jq '.amp'
-```
-
-### Amp Budget Controls
-- Set organization-wide limits in Sourcegraph admin
-- Per-user limits available in enterprise plans
-- Monitor usage alerts via email or Slack integration
-
 ## Cost Prevention Strategies
 
 ### Before Starting
@@ -138,7 +113,7 @@ Watch for these patterns that indicate escalating costs:
 Before each Ralph session:
 
 - [ ] Estimated feature size and set budget
-- [ ] Configured hard budget limit in Claude/Amp
+- [ ] Configured hard budget limit in Claude Code
 - [ ] Set max iterations in ralph.sh
 - [ ] Have monitoring terminal ready
 - [ ] Know how to emergency stop

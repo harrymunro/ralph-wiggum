@@ -93,7 +93,7 @@ git diff HEAD~1 --stat
 ### Resource Usage
 ```bash
 # Monitor CPU/memory usage
-top -l 1 | grep -E "(ralph|claude|amp)"
+top -l 1 | grep -E "(ralph|claude)"
 
 # Check disk usage in project
 du -sh .
