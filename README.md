@@ -9,7 +9,7 @@
 [![License](https://img.shields.io/badge/license-MIT-blue?style=for-the-badge)](LICENSE)
 [![Claude Code](https://img.shields.io/badge/Claude_Code-Compatible-orange?style=for-the-badge)](https://docs.anthropic.com/en/docs/claude-code)
 
-![Ralph](ralph.png)
+<img src="ralph.png" alt="Ralph" width="200">
 
 Based on [Geoffrey Huntley's Ralph pattern](https://ghuntley.com/ralph/).
 
