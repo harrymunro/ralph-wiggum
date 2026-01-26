@@ -1,0 +1,21 @@
+{
+  "project": "TestProject",
+  "branchName": "ralph/new-branch",
+  "description": "Test feature with new branch",
+  "verificationCommands": {
+    "typecheck": "echo 'typecheck passed'",
+    "lint": "echo 'lint passed'",
+    "test": "echo 'test passed'"
+  },
+  "userStories": [
+    {
+      "id": "US-001",
+      "title": "New branch story",
+      "description": "Story for new branch",
+      "acceptanceCriteria": ["Criterion 1"],
+      "priority": 1,
+      "passes": false,
+      "notes": ""
+    }
+  ]
+}
