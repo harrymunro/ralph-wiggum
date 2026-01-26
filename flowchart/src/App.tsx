@@ -72,7 +72,7 @@ const notes = [
     appearsWithStep: 8,
     position: { x: 480, y: 620 },
     color: { bg: '#fdf4f0', border: '#c97a50' },
-    content: `Also updates AGENTS.md with
+    content: `Also updates CLAUDE.md with
 patterns discovered, so future
 iterations learn from this one.`,
   },

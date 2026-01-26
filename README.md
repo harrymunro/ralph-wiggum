@@ -196,9 +196,9 @@ Each PRD item should be small enough to complete in one context window. If a tas
 - "Add authentication"
 - "Refactor the API"
 
-### AGENTS.md Updates Are Critical
+### CLAUDE.md Updates Are Critical
 
-After each iteration, Ralph updates the relevant `AGENTS.md` files with learnings. This is key because AI coding tools automatically read these files, so future iterations (and future human developers) benefit from discovered patterns, gotchas, and conventions.
+After each iteration, Ralph updates the relevant `CLAUDE.md` files with learnings. This is key because Claude Code automatically reads these files, so future iterations (and future human developers) benefit from discovered patterns, gotchas, and conventions.
 
 ### Feedback Loops
 
@@ -215,11 +215,9 @@ When all stories have `passes: true`, Ralph outputs `<promise>COMPLETE</promise>
 
 ## Flowchart
 
-[![Ralph Flowchart](ralph-flowchart.png)](https://snarktank.github.io/ralph/)
+![Ralph Flowchart](ralph-flowchart.png)
 
-**[View Interactive Flowchart](https://snarktank.github.io/ralph/)** - Click through to see each step with animations.
-
-The `flowchart/` directory contains the source code. To run locally:
+The `flowchart/` directory contains an interactive visualization. To run locally:
 
 ```bash
 cd flowchart
@@ -247,8 +245,16 @@ Ralph automatically archives previous runs when you start a new feature (differe
 
 ---
 
+## Acknowledgments
+
+This project is a fork of [snarktank/ralph](https://github.com/snarktank/ralph), originally created by the snarktank team. We are grateful for their foundational work on the Ralph agent pattern.
+
+The original project is licensed under the MIT License, and this derivative work maintains that license with the original copyright notice preserved.
+
+---
+
 ## References
 
+- [Original Ralph repository (snarktank/ralph)](https://github.com/snarktank/ralph)
 - [Geoffrey Huntley's Ralph article](https://ghuntley.com/ralph/)
 - [Claude Code documentation](https://docs.anthropic.com/en/docs/claude-code)
-- [Read my in-depth article on how I use Ralph](https://x.com/ryancarson/status/2008548371712135632)
