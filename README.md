@@ -96,21 +96,32 @@ Ralph works best when you have:
 
 ### Installation
 
-**Option 1: Copy to your project**
+**Step 1: Copy Ralph to your project (required)**
 
 ```bash
 # From your project root
 mkdir -p scripts/ralph
-cp /path/to/ralph/ralph.sh scripts/ralph/
-cp /path/to/ralph/CLAUDE.md scripts/ralph/CLAUDE.md
+cp /path/to/ralph-wiggum/ralph.sh scripts/ralph/
+cp /path/to/ralph-wiggum/CLAUDE.md scripts/ralph/CLAUDE.md
 chmod +x scripts/ralph/ralph.sh
 ```
 
-**Option 2: Install skills globally**
+**Step 2: Install skills (choose one)**
+
+*Option A: Install skills globally*
 
 ```bash
-cp -r skills/prd ~/.claude/skills/
-cp -r skills/ralph ~/.claude/skills/
+cp -r /path/to/ralph-wiggum/skills/prd ~/.claude/skills/
+cp -r /path/to/ralph-wiggum/skills/ralph ~/.claude/skills/
+```
+
+*Option B: Install skills locally to project*
+
+```bash
+# From your project root
+mkdir -p .claude/skills
+cp -r /path/to/ralph-wiggum/skills/prd .claude/skills/
+cp -r /path/to/ralph-wiggum/skills/ralph .claude/skills/
 ```
 
 ---
