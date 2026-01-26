@@ -245,7 +245,7 @@ Ralph automatically archives previous runs when you start a new feature (differe
 
 ## Acknowledgments
 
-This project is a fork of [snarktank/ralph](https://github.com/snarktank/ralph), originally created by the snarktank team. We are grateful for their foundational work on the Ralph agent pattern.
+This project is a fork of [snarktank/ralph](https://github.com/snarktank/ralph), originally created by Ryan Carson and Adam Denenberg. We are grateful for their foundational work on the Ralph agent pattern.
 
 The original project is licensed under the MIT License, and this derivative work maintains that license with the original copyright notice preserved.
 
