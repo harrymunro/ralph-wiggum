@@ -128,6 +128,72 @@ Think of quality gates as physical barriers, not speed bumps:
 
 You cannot "push through" a failing gate. You must fix it or stop.
 
+## Verification Before Completion
+
+Before claiming ANY story is complete, you MUST verify your work systematically. Do not trust your memory or assumptions—run the checks.
+
+### Verification Checklist
+
+Before marking a story as `passes: true`, complete this checklist:
+
+```
+## Verification Checklist for [Story ID]
+
+### 1. Acceptance Criteria Check
+- [ ] Criterion 1: [How verified - command/file check/grep]
+- [ ] Criterion 2: [How verified]
+- [ ] Criterion 3: [How verified]
+... (one checkbox per criterion)
+
+### 2. Quality Gates
+- [ ] Typecheck passes: `npm run build` (or equivalent)
+- [ ] Lint passes: `npm run lint` (or equivalent)
+- [ ] Tests pass: `npm test` (or equivalent)
+
+### 3. Regression Check
+- [ ] Full test suite passes (not just new tests)
+- [ ] No unrelated failures introduced
+
+### 4. Final Verification
+- [ ] Re-read each acceptance criterion one more time
+- [ ] Confirmed each criterion is met with evidence
+```
+
+### How to Verify Each Criterion
+
+For each acceptance criterion, you must have **evidence**, not just belief:
+
+| Criterion Type | Verification Method |
+|----------------|---------------------|
+| "File X exists" | `ls -la path/to/X` or Read tool |
+| "Contains section Y" | `grep -n "Y" file` or Read tool |
+| "Command succeeds" | Run the command, check exit code |
+| "Output contains Z" | Run command, pipe to grep |
+| "Valid JSON" | `jq . file.json` succeeds |
+
+### Before Outputting COMPLETE
+
+When you believe ALL stories are done and you're about to output `<promise>COMPLETE</promise>`:
+
+1. **Re-verify the current story** - Run all quality gates one more time
+2. **Check prd.json** - Confirm all stories show `passes: true`
+3. **Run full verification** - `jq '.userStories[] | select(.passes == false) | .id' prd.json` should return nothing
+4. **Only then** output the COMPLETE signal
+
+If ANY verification fails at this stage, do NOT output COMPLETE. Fix the issue first.
+
+### Evidence Over Assertion
+
+Never claim something works without proving it:
+
+| Bad (Assertion) | Good (Evidence) |
+|-----------------|-----------------|
+| "I added the section" | "Verified with `grep -n 'Section Name' file` - found at line 42" |
+| "Tests pass" | "Ran `npm test` - 47 tests passed, 0 failed" |
+| "File is valid JSON" | "Ran `jq . file.json` - parsed successfully" |
+
+Run the command. See the output. Report the evidence.
+
 ## Browser Testing (Required for Frontend Stories)
 
 For any story that changes UI, you MUST verify it works in the browser:
