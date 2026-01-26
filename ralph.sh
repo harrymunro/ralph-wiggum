@@ -238,9 +238,27 @@ for i in $(seq 1 $MAX_ITERATIONS); do
   # Check for completion signal
   if echo "$OUTPUT" | grep -q "<promise>COMPLETE</promise>"; then
     echo ""
-    echo "Ralph completed all tasks!"
-    echo "Completed at iteration $i of $MAX_ITERATIONS"
-    exit 0
+    echo "COMPLETE signal received. Verifying all stories pass..."
+
+    # Verify all stories actually have passes:true
+    INCOMPLETE_STORIES=$(jq -r '.userStories[] | select(.passes == false) | .id' "$PRD_FILE" 2>/dev/null || echo "")
+
+    if [ -z "$INCOMPLETE_STORIES" ]; then
+      echo "Verification passed: All stories have passes:true"
+      echo ""
+      echo "Ralph completed all tasks!"
+      echo "Completed at iteration $i of $MAX_ITERATIONS"
+      exit 0
+    else
+      echo ""
+      echo "WARNING: COMPLETE claimed but verification failed!"
+      echo "The following stories still have passes:false:"
+      echo "$INCOMPLETE_STORIES" | while read -r story_id; do
+        echo "  - $story_id"
+      done
+      echo ""
+      echo "Continuing iteration to fix incomplete stories..."
+    fi
   fi
   
   echo "Iteration $i complete. Continuing..."
