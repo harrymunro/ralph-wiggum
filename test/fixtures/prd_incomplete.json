@@ -1,0 +1,30 @@
+{
+  "project": "TestProject",
+  "branchName": "ralph/test-feature",
+  "description": "Test feature for testing ralph.sh",
+  "verificationCommands": {
+    "typecheck": "echo 'typecheck passed'",
+    "lint": "echo 'lint passed'",
+    "test": "echo 'test passed'"
+  },
+  "userStories": [
+    {
+      "id": "US-001",
+      "title": "First test story",
+      "description": "First test story description",
+      "acceptanceCriteria": ["Criterion 1", "Criterion 2"],
+      "priority": 1,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "US-002",
+      "title": "Second test story",
+      "description": "Second test story description",
+      "acceptanceCriteria": ["Criterion 1"],
+      "priority": 2,
+      "passes": false,
+      "notes": ""
+    }
+  ]
+}
