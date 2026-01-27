@@ -210,6 +210,49 @@ If ALL stories are complete and passing, reply with:
 
 If there are still stories with `passes: false`, end your response normally (another iteration will pick up the next story).
 
+## Experiment Recording
+
+When running experiments to improve Ralph's evolutionary fitness, record results following this process:
+
+### Before Starting an Experiment
+
+1. Create a new file at `docs/experiments/EXP-XXX.md` by copying `docs/experiments/TEMPLATE.md`
+2. Fill in the Hypothesis section with your expected change and reasoning
+3. Set status to "running" and note the branch name
+
+### After Completing an Experiment
+
+1. Update the Results section with actual metrics from the experiment run
+2. Compare metrics against baseline values in `experiments.json`
+3. Document what worked and what didn't in the Learnings section
+4. Update status to "completed" or "failed"
+5. If the experiment improved fitness, update the baseline in `experiments.json`
+
+### Recording in experiments.json
+
+After each experiment, add an entry to the `experiments` array:
+
+```json
+{
+  "id": "EXP-XXX",
+  "date": "YYYY-MM-DD",
+  "hypothesis": "Brief description of the hypothesis",
+  "metrics": {
+    "completion_rate": 0.XX,
+    "avg_iterations": X.X,
+    "code_quality_rate": 0.XX
+  },
+  "outcome": "merged|discarded|failed",
+  "delta_fitness": +/-X.X
+}
+```
+
+### Key Rules
+
+- Always measure against the same test PRD for consistent baselines
+- Never skip recording failed experiments - they inform future hypotheses
+- Update `experiments.json` programmatically when possible to avoid manual errors
+
 ## Important
 
 - Work on ONE story per iteration
