@@ -253,6 +253,75 @@ After each experiment, add an entry to the `experiments` array:
 - Never skip recording failed experiments - they inform future hypotheses
 - Update `experiments.json` programmatically when possible to avoid manual errors
 
+## Hypothesis Generation
+
+When generating hypotheses for experiments, use this analysis framework to identify the most impactful improvement:
+
+### Step 1: Identify Lowest-Performing Metric
+
+Analyze `experiments.json` to find which baseline metric has the most room for improvement:
+
+1. **Completion Rate** (target: 100%) - Percentage of stories successfully completed
+2. **Avg Iterations** (target: minimize) - Average iterations per completed story
+3. **Code Quality Rate** (target: 100%) - Percentage of completions without quality gate failures
+
+Compare current metrics to baseline and identify which metric:
+- Has dropped the most from baseline
+- Has the largest gap from its target value
+- Has been trending negatively across recent experiments
+
+### Step 2: Root Cause Analysis
+
+For the identified metric, analyze potential causes:
+
+| Low Metric | Likely Root Causes | Investigation Areas |
+|------------|-------------------|---------------------|
+| Completion Rate | Unclear requirements, complex stories, insufficient context | PRD clarity, CLAUDE.md instructions, story sizing |
+| Avg Iterations | Incomplete implementations, test failures, missing patterns | Test coverage, verification checklist, common error patterns |
+| Code Quality Rate | Type errors, lint failures, test breakage | Quality gate strictness, forbidden shortcuts, backpressure rules |
+
+### Step 3: Propose Hypothesis
+
+Structure your hypothesis with these required fields:
+
+```
+{
+  "metric_targeted": "completion_rate|avg_iterations|code_quality_rate",
+  "expected_improvement": "+X% or -X (describe direction and magnitude)",
+  "specific_change": "Concrete mutation to make to ralph/CLAUDE.md/experiments.json",
+  "reasoning": "Why this change should improve the targeted metric"
+}
+```
+
+### Step 4: Design Mutation
+
+The mutation should be:
+- **Minimal**: Change one thing at a time for clear measurement
+- **Reversible**: Can be rolled back if fitness decreases
+- **Measurable**: Will show clear impact on the targeted metric
+
+### Hypothesis Examples
+
+**Example 1: Improving Completion Rate**
+```json
+{
+  "metric_targeted": "completion_rate",
+  "expected_improvement": "+10%",
+  "specific_change": "Add story dependency analysis to CLAUDE.md so agent identifies blocked stories earlier",
+  "reasoning": "Current failures show agent attempting stories that depend on incomplete work"
+}
+```
+
+**Example 2: Reducing Iterations**
+```json
+{
+  "metric_targeted": "avg_iterations",
+  "expected_improvement": "-0.5 iterations per story",
+  "specific_change": "Add verification checklist reminder before marking story complete",
+  "reasoning": "Many extra iterations come from incomplete verifications caught in next iteration"
+}
+```
+
 ## Important
 
 - Work on ONE story per iteration

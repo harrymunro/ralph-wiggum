@@ -10,6 +10,7 @@ MAX_ATTEMPTS_PER_STORY="${MAX_ATTEMPTS_PER_STORY:-5}"
 SKIP_SECURITY="${SKIP_SECURITY_CHECK:-false}"
 EXPERIMENT_MODE="false"
 EXPERIMENT_ID=""
+NEXT_EXPERIMENT_MODE="false"
 
 while [[ $# -gt 0 ]]; do
   case $1 in
@@ -24,6 +25,10 @@ while [[ $# -gt 0 ]]; do
         EXPERIMENT_ID="$2"
         shift
       fi
+      shift
+      ;;
+    --next-experiment)
+      NEXT_EXPERIMENT_MODE="true"
       shift
       ;;
     *)
@@ -84,6 +89,115 @@ PROGRESS_FILE="$SCRIPT_DIR/progress.txt"
 ARCHIVE_DIR="$SCRIPT_DIR/archive"
 LAST_BRANCH_FILE="$SCRIPT_DIR/.last-branch"
 EXPERIMENTS_FILE="$SCRIPT_DIR/experiments.json"
+
+# Function to generate next experiment hypothesis
+generate_next_hypothesis() {
+  if [[ ! -f "$EXPERIMENTS_FILE" ]]; then
+    echo "Error: experiments.json not found at $EXPERIMENTS_FILE"
+    exit 1
+  fi
+
+  echo ""
+  echo "==============================================================="
+  echo "  Next Experiment Hypothesis Generator"
+  echo "==============================================================="
+  echo ""
+
+  # Read baseline metrics
+  local baseline_completion=$(jq -r '.baseline.completion_rate // 100' "$EXPERIMENTS_FILE")
+  local baseline_avg_iter=$(jq -r '.baseline.avg_iterations // 1' "$EXPERIMENTS_FILE")
+  local baseline_quality=$(jq -r '.baseline.code_quality_rate // 100' "$EXPERIMENTS_FILE")
+
+  # Read latest experiment metrics (or use baseline if no experiments)
+  local exp_count=$(jq '.experiments | length' "$EXPERIMENTS_FILE")
+  local current_completion=$baseline_completion
+  local current_avg_iter=$baseline_avg_iter
+  local current_quality=$baseline_quality
+
+  if [[ "$exp_count" -gt 0 ]]; then
+    current_completion=$(jq -r '.experiments[-1].metrics.completion_rate // 100' "$EXPERIMENTS_FILE")
+    current_avg_iter=$(jq -r '.experiments[-1].metrics.avg_iterations // 1' "$EXPERIMENTS_FILE")
+    current_quality=$(jq -r '.experiments[-1].metrics.code_quality_rate // 100' "$EXPERIMENTS_FILE")
+  fi
+
+  echo "  Current Metrics Analysis:"
+  echo "    Completion Rate:    ${current_completion}% (baseline: ${baseline_completion}%)"
+  echo "    Avg Iterations:     ${current_avg_iter} (baseline: ${baseline_avg_iter})"
+  echo "    Code Quality Rate:  ${current_quality}% (baseline: ${baseline_quality}%)"
+  echo ""
+
+  # Calculate gaps from ideal (completion 100%, iterations 1, quality 100%)
+  local completion_gap=$(echo "100 - $current_completion" | bc 2>/dev/null || echo "0")
+  local iteration_gap=$(echo "$current_avg_iter - 1" | bc 2>/dev/null || echo "0")
+  local quality_gap=$(echo "100 - $current_quality" | bc 2>/dev/null || echo "0")
+
+  # Identify lowest-performing metric (largest gap from ideal)
+  local metric_targeted="completion_rate"
+  local expected_improvement="+5%"
+  local specific_change=""
+  local reasoning=""
+
+  # Compare gaps - iteration gap is scaled (1 iteration gap = 10% equivalent)
+  local scaled_iteration_gap=$(echo "$iteration_gap * 10" | bc 2>/dev/null || echo "0")
+
+  echo "  Gap Analysis (distance from ideal):"
+  echo "    Completion Rate gap: ${completion_gap}%"
+  echo "    Avg Iterations gap:  ${iteration_gap} (scaled: ${scaled_iteration_gap}%)"
+  echo "    Code Quality gap:    ${quality_gap}%"
+  echo ""
+
+  # Determine which metric to target based on largest gap
+  if (( $(echo "$completion_gap >= $scaled_iteration_gap && $completion_gap >= $quality_gap" | bc -l 2>/dev/null || echo "0") )); then
+    metric_targeted="completion_rate"
+    expected_improvement="+5%"
+    specific_change="Add clearer story acceptance criteria validation to CLAUDE.md before marking complete"
+    reasoning="Completion rate has the largest gap from ideal. Improving validation before completion should reduce incomplete stories."
+  elif (( $(echo "$scaled_iteration_gap > $completion_gap && $scaled_iteration_gap >= $quality_gap" | bc -l 2>/dev/null || echo "0") )); then
+    metric_targeted="avg_iterations"
+    expected_improvement="-0.3 iterations"
+    specific_change="Add pre-implementation checklist to CLAUDE.md that identifies required changes before coding"
+    reasoning="High iteration count suggests rework. Better upfront planning should reduce iterations needed."
+  else
+    metric_targeted="code_quality_rate"
+    expected_improvement="+5%"
+    specific_change="Strengthen quality gate enforcement in ralph.sh with earlier failure detection"
+    reasoning="Code quality rate needs improvement. Earlier detection of quality issues will reduce failed attempts."
+  fi
+
+  # Generate next experiment ID
+  local next_exp_num=1
+  if [[ "$exp_count" -gt 0 ]]; then
+    local last_exp_num=$(jq -r '.experiments[-1].id // "EXP-000"' "$EXPERIMENTS_FILE" | sed 's/EXP-//' | sed 's/^0*//')
+    if [[ -z "$last_exp_num" || "$last_exp_num" == "null" ]]; then
+      last_exp_num=0
+    fi
+    next_exp_num=$((last_exp_num + 1))
+  fi
+  local next_exp_id=$(printf "EXP-%03d" "$next_exp_num")
+
+  echo "  Proposed Hypothesis:"
+  echo "  ===================="
+  echo ""
+  echo "  {"
+  echo "    \"experiment_id\": \"$next_exp_id\","
+  echo "    \"metric_targeted\": \"$metric_targeted\","
+  echo "    \"expected_improvement\": \"$expected_improvement\","
+  echo "    \"specific_change\": \"$specific_change\","
+  echo "    \"reasoning\": \"$reasoning\""
+  echo "  }"
+  echo ""
+  echo "==============================================================="
+  echo ""
+  echo "To run this experiment:"
+  echo "  ./ralph.sh --experiment $next_exp_id"
+  echo ""
+}
+
+# Handle --next-experiment flag
+if [[ "$NEXT_EXPERIMENT_MODE" == "true" ]]; then
+  generate_next_hypothesis
+  exit 0
+fi
 
 # Experiment mode setup
 if [[ "$EXPERIMENT_MODE" == "true" ]]; then
