@@ -8,11 +8,22 @@ set -e
 MAX_ITERATIONS=10
 MAX_ATTEMPTS_PER_STORY="${MAX_ATTEMPTS_PER_STORY:-5}"
 SKIP_SECURITY="${SKIP_SECURITY_CHECK:-false}"
+EXPERIMENT_MODE="false"
+EXPERIMENT_ID=""
 
 while [[ $# -gt 0 ]]; do
   case $1 in
     --skip-security-check)
       SKIP_SECURITY="true"
+      shift
+      ;;
+    --experiment)
+      EXPERIMENT_MODE="true"
+      # Check if next argument is an experiment ID (not another flag)
+      if [[ -n "${2:-}" && ! "$2" =~ ^-- ]]; then
+        EXPERIMENT_ID="$2"
+        shift
+      fi
       shift
       ;;
     *)
@@ -72,6 +83,58 @@ PRD_FILE="$SCRIPT_DIR/prd.json"
 PROGRESS_FILE="$SCRIPT_DIR/progress.txt"
 ARCHIVE_DIR="$SCRIPT_DIR/archive"
 LAST_BRANCH_FILE="$SCRIPT_DIR/.last-branch"
+EXPERIMENTS_FILE="$SCRIPT_DIR/experiments.json"
+
+# Experiment mode setup
+if [[ "$EXPERIMENT_MODE" == "true" ]]; then
+  echo ""
+  echo "==============================================================="
+  echo "  Experiment Mode Enabled"
+  echo "==============================================================="
+  echo ""
+
+  # Generate experiment ID if not provided
+  if [[ -z "$EXPERIMENT_ID" ]]; then
+    # Get next experiment number from experiments.json
+    if [[ -f "$EXPERIMENTS_FILE" ]]; then
+      LAST_EXP_NUM=$(jq -r '.experiments[-1].id // "EXP-000"' "$EXPERIMENTS_FILE" | sed 's/EXP-//' | sed 's/^0*//')
+      if [[ -z "$LAST_EXP_NUM" || "$LAST_EXP_NUM" == "null" ]]; then
+        LAST_EXP_NUM=0
+      fi
+      NEXT_EXP_NUM=$((LAST_EXP_NUM + 1))
+      EXPERIMENT_ID=$(printf "EXP-%03d" "$NEXT_EXP_NUM")
+    else
+      EXPERIMENT_ID="EXP-001"
+    fi
+  fi
+
+  echo "  Experiment ID: $EXPERIMENT_ID"
+
+  # Create experiment feature branch
+  EXPERIMENT_BRANCH="ralph/experiment-${EXPERIMENT_ID,,}"
+  CURRENT_GIT_BRANCH=$(git branch --show-current 2>/dev/null || echo "")
+
+  if [[ -n "$CURRENT_GIT_BRANCH" ]]; then
+    echo "  Current branch: $CURRENT_GIT_BRANCH"
+    echo "  Creating experiment branch: $EXPERIMENT_BRANCH"
+
+    # Check if branch already exists
+    if git show-ref --verify --quiet "refs/heads/$EXPERIMENT_BRANCH" 2>/dev/null; then
+      echo "  Branch already exists, checking it out..."
+      git checkout "$EXPERIMENT_BRANCH"
+    else
+      git checkout -b "$EXPERIMENT_BRANCH"
+    fi
+    echo "  Experiment branch created/checked out: $EXPERIMENT_BRANCH"
+  else
+    echo "  WARNING: Not in a git repository, skipping branch creation"
+  fi
+
+  # Record experiment start time
+  EXPERIMENT_START_TIME=$(date +%s)
+  EXPERIMENT_DATE=$(date +%Y-%m-%d)
+  echo ""
+fi
 
 # Archive previous run if branch changed
 if [ -f "$PRD_FILE" ] && [ -f "$LAST_BRANCH_FILE" ]; then
@@ -202,6 +265,154 @@ count_skipped_stories() {
   fi
 }
 
+# Function to compare metrics with baseline and record experiment results
+record_experiment_results() {
+  if [[ "$EXPERIMENT_MODE" != "true" ]]; then
+    return
+  fi
+
+  local completed=$(count_completed_stories)
+  local total=$(count_total_stories)
+  local skipped=$(count_skipped_stories)
+  local completion_rate=0
+  local avg_iterations=0
+
+  if [ "$total" -gt 0 ]; then
+    completion_rate=$(echo "scale=2; $completed * 100 / $total" | bc 2>/dev/null || echo "0")
+  fi
+
+  if [ "$completed" -gt 0 ]; then
+    avg_iterations=$(echo "scale=2; $METRICS_ITERATIONS / $completed" | bc 2>/dev/null || echo "0")
+  fi
+
+  # Calculate code quality rate (passed / (passed + skipped))
+  local passed_and_skipped=$((completed + skipped))
+  local code_quality_rate=100
+  if [ "$passed_and_skipped" -gt 0 ]; then
+    code_quality_rate=$(echo "scale=2; $completed * 100 / $passed_and_skipped" | bc 2>/dev/null || echo "100")
+  fi
+
+  echo ""
+  echo "==============================================================="
+  echo "  Experiment Results: $EXPERIMENT_ID"
+  echo "==============================================================="
+  echo ""
+
+  # Read baseline from experiments.json
+  if [[ -f "$EXPERIMENTS_FILE" ]]; then
+    local baseline_completion=$(jq -r '.baseline.completion_rate // 0' "$EXPERIMENTS_FILE")
+    local baseline_avg_iter=$(jq -r '.baseline.avg_iterations // 0' "$EXPERIMENTS_FILE")
+    local baseline_quality=$(jq -r '.baseline.code_quality_rate // 100' "$EXPERIMENTS_FILE")
+
+    # Calculate deltas
+    local delta_completion=$(echo "scale=2; $completion_rate - $baseline_completion" | bc 2>/dev/null || echo "0")
+    local delta_avg_iter=$(echo "scale=2; $avg_iterations - $baseline_avg_iter" | bc 2>/dev/null || echo "0")
+    local delta_quality=$(echo "scale=2; $code_quality_rate - $baseline_quality" | bc 2>/dev/null || echo "0")
+
+    echo "  Metrics Comparison to Baseline:"
+    echo "    Completion Rate: ${completion_rate}% (baseline: ${baseline_completion}%, delta: ${delta_completion}%)"
+    echo "    Avg Iterations:  ${avg_iterations} (baseline: ${baseline_avg_iter}, delta: ${delta_avg_iter})"
+    echo "    Code Quality:    ${code_quality_rate}% (baseline: ${baseline_quality}%, delta: ${delta_quality}%)"
+    echo ""
+
+    # Determine outcome
+    local outcome="completed"
+    local success=$([[ "$completion_rate" == "100" || "$completion_rate" == "100.00" ]] && echo "true" || echo "false")
+
+    # Calculate fitness delta (simple: average of improvements across metrics)
+    # For avg_iterations, negative is good (fewer iterations = better)
+    local delta_fitness=$(echo "scale=2; ($delta_completion - $delta_avg_iter * 10 + $delta_quality) / 3" | bc 2>/dev/null || echo "0")
+
+    echo "  Fitness Delta: ${delta_fitness}"
+    echo ""
+
+    # Record to experiments.json
+    local experiment_entry=$(cat <<EOF
+{
+  "id": "$EXPERIMENT_ID",
+  "date": "$EXPERIMENT_DATE",
+  "hypothesis": "Experiment run",
+  "metrics": {
+    "completion_rate": $completion_rate,
+    "avg_iterations": $avg_iterations,
+    "code_quality_rate": $code_quality_rate
+  },
+  "outcome": "$outcome",
+  "delta_fitness": $delta_fitness
+}
+EOF
+)
+
+    # Add experiment to experiments.json
+    jq --argjson exp "$experiment_entry" '.experiments += [$exp]' "$EXPERIMENTS_FILE" > "$EXPERIMENTS_FILE.tmp" && \
+      mv "$EXPERIMENTS_FILE.tmp" "$EXPERIMENTS_FILE"
+
+    echo "  Results recorded to experiments.json"
+
+    # Create experiment markdown file
+    local exp_md_file="$SCRIPT_DIR/docs/experiments/${EXPERIMENT_ID}.md"
+    mkdir -p "$(dirname "$exp_md_file")"
+
+    cat > "$exp_md_file" <<EOF
+# Experiment: $EXPERIMENT_ID
+
+## Metadata
+- **Date:** $EXPERIMENT_DATE
+- **Status:** completed
+- **Branch:** $EXPERIMENT_BRANCH
+
+## Hypothesis
+
+> Evolutionary loop experiment run.
+
+## Mutation
+
+### Changes Made
+- Experiment run automatically by ralph.sh --experiment
+
+### Files Modified
+- Various files modified during experiment run
+
+## Results
+
+### Metrics (compared to baseline)
+
+| Metric | Baseline | This Experiment | Delta |
+|--------|----------|-----------------|-------|
+| Completion Rate | ${baseline_completion}% | ${completion_rate}% | ${delta_completion}% |
+| Avg Iterations | ${baseline_avg_iter} | ${avg_iterations} | ${delta_avg_iter} |
+| Code Quality Rate | ${baseline_quality}% | ${code_quality_rate}% | ${delta_quality}% |
+
+### Outcome
+- [x] **Completed** - Experiment finished
+- Fitness Delta: ${delta_fitness}
+
+## Learnings
+
+### What Worked
+- (To be filled in manually)
+
+### What Didn't Work
+- (To be filled in manually)
+
+### Unexpected Discoveries
+- (To be filled in manually)
+
+## Next Hypothesis
+
+Based on these results, the next experiment should explore:
+
+> (To be determined based on analysis)
+EOF
+
+    echo "  Experiment documented in $exp_md_file"
+  else
+    echo "  WARNING: experiments.json not found, cannot compare to baseline"
+  fi
+
+  echo "==============================================================="
+}
+
 # Function to output metrics summary
 output_metrics_summary() {
   local completed=$(count_completed_stories)
@@ -298,6 +509,7 @@ for i in $(seq 1 $MAX_ITERATIONS); do
       echo "Ralph completed all tasks!"
       echo "Completed at iteration $i of $MAX_ITERATIONS"
       output_metrics_summary
+      record_experiment_results
       exit 0
     else
       echo ""
@@ -319,4 +531,5 @@ echo ""
 echo "Ralph reached max iterations ($MAX_ITERATIONS) without completing all tasks."
 echo "Check $PROGRESS_FILE for status."
 output_metrics_summary
+record_experiment_results
 exit 1
