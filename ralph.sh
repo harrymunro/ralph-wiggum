@@ -90,11 +90,136 @@ ARCHIVE_DIR="$SCRIPT_DIR/archive"
 LAST_BRANCH_FILE="$SCRIPT_DIR/.last-branch"
 EXPERIMENTS_FILE="$SCRIPT_DIR/experiments.json"
 
+# Function to check if stagnation is detected (3+ consecutive experiments with no improvement)
+check_stagnation() {
+  if [[ ! -f "$EXPERIMENTS_FILE" ]]; then
+    echo "false"
+    return
+  fi
+
+  local stagnation_count=$(jq -r '.stagnation_count // 0' "$EXPERIMENTS_FILE")
+  if [[ "$stagnation_count" -ge 3 ]]; then
+    echo "true"
+  else
+    echo "false"
+  fi
+}
+
+# Function to update stagnation count after an experiment
+update_stagnation_count() {
+  local delta_fitness="$1"
+
+  if [[ ! -f "$EXPERIMENTS_FILE" ]]; then
+    return
+  fi
+
+  # Check if there was improvement (delta_fitness > 0)
+  local improved=$(echo "$delta_fitness > 0" | bc -l 2>/dev/null || echo "0")
+
+  if [[ "$improved" -eq 1 ]]; then
+    # Reset stagnation count and update last_improvement_at
+    local current_date=$(date +%Y-%m-%d)
+    jq --arg date "$current_date" '.stagnation_count = 0 | .last_improvement_at = $date' "$EXPERIMENTS_FILE" > "$EXPERIMENTS_FILE.tmp" && \
+      mv "$EXPERIMENTS_FILE.tmp" "$EXPERIMENTS_FILE"
+    echo "  Fitness improved - stagnation count reset to 0"
+  else
+    # Increment stagnation count
+    local new_count=$(jq -r '.stagnation_count + 1' "$EXPERIMENTS_FILE")
+    jq '.stagnation_count += 1' "$EXPERIMENTS_FILE" > "$EXPERIMENTS_FILE.tmp" && \
+      mv "$EXPERIMENTS_FILE.tmp" "$EXPERIMENTS_FILE"
+    echo "  No improvement - stagnation count: $new_count"
+
+    if [[ "$new_count" -ge 3 ]]; then
+      echo ""
+      echo "  WARNING: Stagnation detected ($new_count consecutive experiments without improvement)"
+      echo "  Consider using a big mutation from the catalog in CLAUDE.md"
+    fi
+  fi
+}
+
+# Big Mutation Catalog - major structural changes to escape local maxima
+BIG_MUTATIONS=(
+  "MUTATION-001|Restructure PRD Format|Change PRD from flat user stories to hierarchical epics with dependencies"
+  "MUTATION-002|Add Pre-Implementation Analysis|Add mandatory codebase exploration phase before any code changes"
+  "MUTATION-003|Implement Rollback Checkpoints|Add git-based checkpoints every N iterations with automatic rollback on failure"
+  "MUTATION-004|Add Test-First Verification|Require writing tests before implementation for each acceptance criterion"
+  "MUTATION-005|Implement Parallel Story Execution|Allow concurrent work on independent stories to increase throughput"
+  "MUTATION-006|Add Context Compression|Summarize progress.txt periodically to prevent context window exhaustion"
+  "MUTATION-007|Implement Semantic Chunking|Break large stories into semantic units that can be verified independently"
+)
+
+# Function to select a big mutation from the catalog
+select_big_mutation() {
+  if [[ ! -f "$EXPERIMENTS_FILE" ]]; then
+    echo "Error: experiments.json not found"
+    return 1
+  fi
+
+  echo ""
+  echo "==============================================================="
+  echo "  Big Mutation Selection (Stagnation Escape)"
+  echo "==============================================================="
+  echo ""
+
+  # Get list of previously tried mutations from experiments
+  local tried_mutations=$(jq -r '.experiments[]? | select(.hypothesis | test("MUTATION-[0-9]+")) | .hypothesis' "$EXPERIMENTS_FILE" 2>/dev/null | grep -o 'MUTATION-[0-9]*' || echo "")
+
+  echo "  Stagnation detected - selecting from big mutation catalog..."
+  echo ""
+
+  # Find first untried mutation
+  local selected_mutation=""
+  for mutation in "${BIG_MUTATIONS[@]}"; do
+    local mutation_id=$(echo "$mutation" | cut -d'|' -f1)
+    local mutation_name=$(echo "$mutation" | cut -d'|' -f2)
+    local mutation_desc=$(echo "$mutation" | cut -d'|' -f3)
+
+    if [[ ! "$tried_mutations" =~ "$mutation_id" ]]; then
+      selected_mutation="$mutation"
+      break
+    fi
+  done
+
+  if [[ -z "$selected_mutation" ]]; then
+    echo "  All big mutations have been tried. Consider defining new mutations."
+    echo ""
+    # Return the first mutation as fallback
+    selected_mutation="${BIG_MUTATIONS[0]}"
+  fi
+
+  local mutation_id=$(echo "$selected_mutation" | cut -d'|' -f1)
+  local mutation_name=$(echo "$selected_mutation" | cut -d'|' -f2)
+  local mutation_desc=$(echo "$selected_mutation" | cut -d'|' -f3)
+
+  echo "  Selected Big Mutation:"
+  echo "    ID:          $mutation_id"
+  echo "    Name:        $mutation_name"
+  echo "    Description: $mutation_desc"
+  echo ""
+
+  # Output as JSON for programmatic use
+  echo "  {"
+  echo "    \"mutation_id\": \"$mutation_id\","
+  echo "    \"mutation_name\": \"$mutation_name\","
+  echo "    \"mutation_description\": \"$mutation_desc\""
+  echo "  }"
+  echo ""
+  echo "==============================================================="
+}
+
 # Function to generate next experiment hypothesis
 generate_next_hypothesis() {
   if [[ ! -f "$EXPERIMENTS_FILE" ]]; then
     echo "Error: experiments.json not found at $EXPERIMENTS_FILE"
     exit 1
+  fi
+
+  # Check for stagnation first
+  local is_stagnated=$(check_stagnation)
+
+  if [[ "$is_stagnated" == "true" ]]; then
+    select_big_mutation
+    return
   fi
 
   echo ""
@@ -520,6 +645,9 @@ Based on these results, the next experiment should explore:
 EOF
 
     echo "  Experiment documented in $exp_md_file"
+
+    # Update stagnation tracking
+    update_stagnation_count "$delta_fitness"
   else
     echo "  WARNING: experiments.json not found, cannot compare to baseline"
   fi

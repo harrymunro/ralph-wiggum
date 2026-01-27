@@ -322,6 +322,94 @@ The mutation should be:
 }
 ```
 
+## Big Mutation Catalog
+
+When incremental changes stop improving fitness (stagnation detected after 3+ consecutive experiments without improvement), select from these major structural changes to escape local maxima:
+
+### MUTATION-001: Restructure PRD Format
+**Description:** Change PRD from flat user stories to hierarchical epics with dependencies
+**Target Metric:** completion_rate
+**Risk Level:** High
+**Expected Impact:** Better story sequencing, reduced blocked stories
+**Implementation:**
+- Add `dependencies` array to each user story
+- Add `epic` parent grouping
+- Modify ralph.sh to check dependencies before starting a story
+
+### MUTATION-002: Add Pre-Implementation Analysis
+**Description:** Add mandatory codebase exploration phase before any code changes
+**Target Metric:** avg_iterations
+**Risk Level:** Medium
+**Expected Impact:** Fewer false starts, better understanding before coding
+**Implementation:**
+- Add "Exploration Phase" section to CLAUDE.md workflow
+- Require reading related files before editing
+- Document findings before implementation
+
+### MUTATION-003: Implement Rollback Checkpoints
+**Description:** Add git-based checkpoints every N iterations with automatic rollback on failure
+**Target Metric:** code_quality_rate
+**Risk Level:** Medium
+**Expected Impact:** Faster recovery from bad changes, reduced cascading failures
+**Implementation:**
+- Add `git stash` checkpoints in ralph.sh
+- Implement automatic rollback when quality gates fail repeatedly
+- Track checkpoint history in progress.txt
+
+### MUTATION-004: Add Test-First Verification
+**Description:** Require writing tests before implementation for each acceptance criterion
+**Target Metric:** code_quality_rate
+**Risk Level:** High
+**Expected Impact:** Better test coverage, clearer success criteria
+**Implementation:**
+- Modify CLAUDE.md to require test file creation first
+- Add test existence check before implementation phase
+- Verify tests fail initially, pass after implementation
+
+### MUTATION-005: Implement Parallel Story Execution
+**Description:** Allow concurrent work on independent stories to increase throughput
+**Target Metric:** avg_iterations
+**Risk Level:** High
+**Expected Impact:** Faster completion for independent work streams
+**Implementation:**
+- Identify stories without dependencies
+- Spawn parallel claude instances for independent stories
+- Merge results and resolve conflicts
+
+### MUTATION-006: Add Context Compression
+**Description:** Summarize progress.txt periodically to prevent context window exhaustion
+**Target Metric:** completion_rate
+**Risk Level:** Low
+**Expected Impact:** Maintain context quality in long-running sessions
+**Implementation:**
+- Add summary generation every N iterations
+- Archive detailed logs, keep summaries in main progress.txt
+- Preserve critical patterns and learnings
+
+### MUTATION-007: Implement Semantic Chunking
+**Description:** Break large stories into semantic units that can be verified independently
+**Target Metric:** completion_rate, code_quality_rate
+**Risk Level:** Medium
+**Expected Impact:** More granular progress, easier debugging of failures
+**Implementation:**
+- Add story decomposition phase
+- Create sub-tasks with individual verification
+- Track completion at chunk level
+
+### When to Use Big Mutations
+
+Big mutations should only be selected when:
+1. **Stagnation is confirmed** - 3+ consecutive experiments showed no fitness improvement
+2. **Incremental changes exhausted** - Standard hypothesis generation isn't identifying new improvements
+3. **Clear metric target** - The big mutation addresses the specific struggling metric
+
+After selecting a big mutation:
+1. Create a dedicated experiment branch
+2. Implement the full mutation
+3. Run against the test PRD
+4. Compare results to baseline
+5. Merge if fitness improves, discard if not
+
 ## Important
 
 - Work on ONE story per iteration
