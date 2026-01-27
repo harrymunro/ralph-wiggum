@@ -21,6 +21,8 @@ setup() {
   "experiments": []
 }
 EOF
+  # Create PRD with incomplete stories (required for hypothesis generation)
+  create_incomplete_prd
 }
 
 teardown() {
@@ -318,6 +320,9 @@ EOF
   ]
 }
 EOF
+
+  # Ensure PRD has incomplete stories
+  create_incomplete_prd
 
   # Copy ralph.sh to test directory
   cp "$BATS_TEST_DIRNAME/../ralph.sh" "$TEST_DIR/"

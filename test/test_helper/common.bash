@@ -140,3 +140,25 @@ assert_output_not_contains() {
     return 1
   fi
 }
+
+# Create a PRD with incomplete stories (for hypothesis generation tests)
+create_incomplete_prd() {
+  cat > "$TEST_DIR/prd.json" << 'EOF'
+{
+  "project": "test-project",
+  "branchName": "ralph/test",
+  "description": "Test PRD with incomplete stories",
+  "userStories": [
+    {
+      "id": "US-001",
+      "title": "Test Story",
+      "description": "A test story",
+      "acceptanceCriteria": ["Test passes"],
+      "priority": 1,
+      "passes": false,
+      "notes": ""
+    }
+  ]
+}
+EOF
+}

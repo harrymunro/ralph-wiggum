@@ -20,6 +20,8 @@ setup() {
   "experiments": []
 }
 EOF
+  # Create PRD with incomplete stories (required for hypothesis generation)
+  create_incomplete_prd
 }
 
 teardown() {
@@ -46,13 +48,15 @@ EOF
 }
 
 @test "--next-experiment outputs hypothesis generator header" {
-  run bash "$BATS_TEST_DIRNAME/../ralph.sh" --next-experiment
+  cd "$TEST_DIR"
+  run bash "$TEST_DIR/ralph.sh" --next-experiment
   [ "$status" -eq 0 ]
   [[ "$output" == *"Next Experiment Hypothesis Generator"* ]]
 }
 
 @test "--next-experiment reads baseline metrics from experiments.json" {
-  run bash "$BATS_TEST_DIRNAME/../ralph.sh" --next-experiment
+  cd "$TEST_DIR"
+  run bash "$TEST_DIR/ralph.sh" --next-experiment
   [ "$status" -eq 0 ]
   [[ "$output" == *"Current Metrics Analysis"* ]]
   [[ "$output" == *"Completion Rate"* ]]
@@ -61,7 +65,8 @@ EOF
 }
 
 @test "--next-experiment outputs structured hypothesis" {
-  run bash "$BATS_TEST_DIRNAME/../ralph.sh" --next-experiment
+  cd "$TEST_DIR"
+  run bash "$TEST_DIR/ralph.sh" --next-experiment
   [ "$status" -eq 0 ]
   [[ "$output" == *"Proposed Hypothesis"* ]]
   [[ "$output" == *"metric_targeted"* ]]
@@ -79,6 +84,7 @@ EOF
     "avg_iterations": 1,
     "code_quality_rate": 100
   },
+  "stagnation_count": 0,
   "experiments": [
     {
       "id": "EXP-001",
@@ -94,15 +100,7 @@ EOF
 EOF
 
   cd "$TEST_DIR"
-  # Create a minimal ralph.sh that uses the local experiments.json
-  cat > "$TEST_DIR/test_hypothesis.sh" << 'SCRIPT'
-#!/bin/bash
-EXPERIMENTS_FILE="$PWD/experiments.json"
-source "$1"
-SCRIPT
-  chmod +x "$TEST_DIR/test_hypothesis.sh"
-
-  run bash "$BATS_TEST_DIRNAME/../ralph.sh" --next-experiment
+  run bash "$TEST_DIR/ralph.sh" --next-experiment
   # When completion_rate has largest gap (40%), it should be targeted
   [[ "$output" == *"metric_targeted"* ]]
 }
@@ -133,13 +131,15 @@ EOF
 }
 
 @test "--next-experiment shows gap analysis" {
-  run bash "$BATS_TEST_DIRNAME/../ralph.sh" --next-experiment
+  cd "$TEST_DIR"
+  run bash "$TEST_DIR/ralph.sh" --next-experiment
   [ "$status" -eq 0 ]
   [[ "$output" == *"Gap Analysis"* ]]
 }
 
 @test "--next-experiment provides run command" {
-  run bash "$BATS_TEST_DIRNAME/../ralph.sh" --next-experiment
+  cd "$TEST_DIR"
+  run bash "$TEST_DIR/ralph.sh" --next-experiment
   [ "$status" -eq 0 ]
   [[ "$output" == *"To run this experiment"* ]]
   [[ "$output" == *"./ralph.sh --experiment"* ]]
@@ -160,11 +160,11 @@ EOF
 }
 
 @test "--next-experiment exits immediately without running main loop" {
-  # Create a complete PRD and mock claude
-  cp "$BATS_TEST_DIRNAME/fixtures/prd_complete.json" "$TEST_DIR/prd.json"
+  # Create mock claude (PRD already has incomplete stories from setup)
   create_mock_claude_complete
 
-  run bash "$BATS_TEST_DIRNAME/../ralph.sh" --next-experiment
+  cd "$TEST_DIR"
+  run bash "$TEST_DIR/ralph.sh" --next-experiment
   [ "$status" -eq 0 ]
   # Should NOT see "Starting Ralph" which is the main loop message
   [[ "$output" != *"Starting Ralph - Max iterations"* ]]

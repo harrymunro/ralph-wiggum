@@ -11,6 +11,319 @@
     "notes": "Baseline established from test suite metrics. Tests verify: 41 tests passing, metrics output working, circuit breaker functional. Real-world metrics to be collected from production runs."
   },
   "stagnation_count": 0,
-  "last_improvement_at": null,
-  "experiments": []
+  "last_improvement_at": "2026-01-26",
+  "experiments": [
+    {
+      "id": "EXP-001",
+      "date": "2026-01-26",
+      "hypothesis": "Experiment run",
+      "metrics": {
+        "completion_rate": 100.00,
+        "avg_iterations": 0.16,
+        "code_quality_rate": 100.00
+      },
+      "outcome": "completed",
+      "delta_fitness": 2.80
+    },
+    {
+      "id": "EXP-002",
+      "date": "2026-01-26",
+      "hypothesis": "Experiment run",
+      "metrics": {
+        "completion_rate": 100.00,
+        "avg_iterations": 0.16,
+        "code_quality_rate": 100.00
+      },
+      "outcome": "completed",
+      "delta_fitness": 2.80
+    },
+    {
+      "id": "EXP-003",
+      "date": "2026-01-26",
+      "hypothesis": "Experiment run",
+      "metrics": {
+        "completion_rate": 100.00,
+        "avg_iterations": 0.16,
+        "code_quality_rate": 100.00
+      },
+      "outcome": "completed",
+      "delta_fitness": 2.80
+    },
+    {
+      "id": "EXP-004",
+      "date": "2026-01-26",
+      "hypothesis": "Experiment run",
+      "metrics": {
+        "completion_rate": 100.00,
+        "avg_iterations": 0.16,
+        "code_quality_rate": 100.00
+      },
+      "outcome": "completed",
+      "delta_fitness": 2.80
+    },
+    {
+      "id": "EXP-005",
+      "date": "2026-01-26",
+      "hypothesis": "Experiment run",
+      "metrics": {
+        "completion_rate": 100.00,
+        "avg_iterations": 0.16,
+        "code_quality_rate": 100.00
+      },
+      "outcome": "completed",
+      "delta_fitness": 2.80
+    },
+    {
+      "id": "EXP-006",
+      "date": "2026-01-26",
+      "hypothesis": "Experiment run",
+      "metrics": {
+        "completion_rate": 100.00,
+        "avg_iterations": 0.16,
+        "code_quality_rate": 100.00
+      },
+      "outcome": "completed",
+      "delta_fitness": 2.80
+    },
+    {
+      "id": "EXP-007",
+      "date": "2026-01-26",
+      "hypothesis": "Experiment run",
+      "metrics": {
+        "completion_rate": 100.00,
+        "avg_iterations": 0.16,
+        "code_quality_rate": 100.00
+      },
+      "outcome": "completed",
+      "delta_fitness": 2.80
+    },
+    {
+      "id": "EXP-008",
+      "date": "2026-01-26",
+      "hypothesis": "Experiment run",
+      "metrics": {
+        "completion_rate": 100.00,
+        "avg_iterations": 0.16,
+        "code_quality_rate": 100.00
+      },
+      "outcome": "completed",
+      "delta_fitness": 2.80
+    },
+    {
+      "id": "EXP-009",
+      "date": "2026-01-26",
+      "hypothesis": "Experiment run",
+      "metrics": {
+        "completion_rate": 100.00,
+        "avg_iterations": 0.16,
+        "code_quality_rate": 100.00
+      },
+      "outcome": "completed",
+      "delta_fitness": 2.80
+    },
+    {
+      "id": "EXP-010",
+      "date": "2026-01-26",
+      "hypothesis": "Experiment run",
+      "metrics": {
+        "completion_rate": 100.00,
+        "avg_iterations": 0.16,
+        "code_quality_rate": 100.00
+      },
+      "outcome": "completed",
+      "delta_fitness": 2.80
+    },
+    {
+      "id": "EXP-011",
+      "date": "2026-01-26",
+      "hypothesis": "Experiment run",
+      "metrics": {
+        "completion_rate": 100.00,
+        "avg_iterations": 0.16,
+        "code_quality_rate": 100.00
+      },
+      "outcome": "completed",
+      "delta_fitness": 2.80
+    },
+    {
+      "id": "EXP-012",
+      "date": "2026-01-26",
+      "hypothesis": "Experiment run",
+      "metrics": {
+        "completion_rate": 100.00,
+        "avg_iterations": 0.16,
+        "code_quality_rate": 100.00
+      },
+      "outcome": "completed",
+      "delta_fitness": 2.80
+    },
+    {
+      "id": "EXP-013",
+      "date": "2026-01-26",
+      "hypothesis": "Experiment run",
+      "metrics": {
+        "completion_rate": 100.00,
+        "avg_iterations": 0.16,
+        "code_quality_rate": 100.00
+      },
+      "outcome": "completed",
+      "delta_fitness": 2.80
+    },
+    {
+      "id": "EXP-014",
+      "date": "2026-01-26",
+      "hypothesis": "Experiment run",
+      "metrics": {
+        "completion_rate": 100.00,
+        "avg_iterations": 0.16,
+        "code_quality_rate": 100.00
+      },
+      "outcome": "completed",
+      "delta_fitness": 2.80
+    },
+    {
+      "id": "EXP-015",
+      "date": "2026-01-26",
+      "hypothesis": "Experiment run",
+      "metrics": {
+        "completion_rate": 100.00,
+        "avg_iterations": 0.16,
+        "code_quality_rate": 100.00
+      },
+      "outcome": "completed",
+      "delta_fitness": 2.80
+    },
+    {
+      "id": "EXP-016",
+      "date": "2026-01-26",
+      "hypothesis": "Experiment run",
+      "metrics": {
+        "completion_rate": 100.00,
+        "avg_iterations": 0.16,
+        "code_quality_rate": 100.00
+      },
+      "outcome": "completed",
+      "delta_fitness": 2.80
+    },
+    {
+      "id": "EXP-017",
+      "date": "2026-01-26",
+      "hypothesis": "Experiment run",
+      "metrics": {
+        "completion_rate": 100.00,
+        "avg_iterations": 0.16,
+        "code_quality_rate": 100.00
+      },
+      "outcome": "completed",
+      "delta_fitness": 2.80
+    },
+    {
+      "id": "EXP-018",
+      "date": "2026-01-26",
+      "hypothesis": "Experiment run",
+      "metrics": {
+        "completion_rate": 100.00,
+        "avg_iterations": 0.16,
+        "code_quality_rate": 100.00
+      },
+      "outcome": "completed",
+      "delta_fitness": 2.80
+    },
+    {
+      "id": "EXP-019",
+      "date": "2026-01-26",
+      "hypothesis": "Experiment run",
+      "metrics": {
+        "completion_rate": 100.00,
+        "avg_iterations": 0.16,
+        "code_quality_rate": 100.00
+      },
+      "outcome": "completed",
+      "delta_fitness": 2.80
+    },
+    {
+      "id": "EXP-020",
+      "date": "2026-01-26",
+      "hypothesis": "Experiment run",
+      "metrics": {
+        "completion_rate": 100.00,
+        "avg_iterations": 0.16,
+        "code_quality_rate": 100.00
+      },
+      "outcome": "completed",
+      "delta_fitness": 2.80
+    },
+    {
+      "id": "EXP-021",
+      "date": "2026-01-26",
+      "hypothesis": "Experiment run",
+      "metrics": {
+        "completion_rate": 100.00,
+        "avg_iterations": 0.16,
+        "code_quality_rate": 100.00
+      },
+      "outcome": "completed",
+      "delta_fitness": 2.80
+    },
+    {
+      "id": "EXP-022",
+      "date": "2026-01-26",
+      "hypothesis": "Experiment run",
+      "metrics": {
+        "completion_rate": 100.00,
+        "avg_iterations": 0.16,
+        "code_quality_rate": 100.00
+      },
+      "outcome": "completed",
+      "delta_fitness": 2.80
+    },
+    {
+      "id": "EXP-023",
+      "date": "2026-01-26",
+      "hypothesis": "Experiment run",
+      "metrics": {
+        "completion_rate": 100.00,
+        "avg_iterations": 0.16,
+        "code_quality_rate": 100.00
+      },
+      "outcome": "completed",
+      "delta_fitness": 2.80
+    },
+    {
+      "id": "EXP-024",
+      "date": "2026-01-26",
+      "hypothesis": "Experiment run",
+      "metrics": {
+        "completion_rate": 100.00,
+        "avg_iterations": 0.16,
+        "code_quality_rate": 100.00
+      },
+      "outcome": "completed",
+      "delta_fitness": 2.80
+    },
+    {
+      "id": "EXP-025",
+      "date": "2026-01-26",
+      "hypothesis": "Experiment run",
+      "metrics": {
+        "completion_rate": 100.00,
+        "avg_iterations": 0.16,
+        "code_quality_rate": 100.00
+      },
+      "outcome": "completed",
+      "delta_fitness": 2.80
+    },
+    {
+      "id": "EXP-026",
+      "date": "2026-01-26",
+      "hypothesis": "Experiment run",
+      "metrics": {
+        "completion_rate": 100.00,
+        "avg_iterations": 0.16,
+        "code_quality_rate": 100.00
+      },
+      "outcome": "completed",
+      "delta_fitness": 2.80
+    }
+  ]
 }

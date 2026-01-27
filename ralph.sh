@@ -222,11 +222,46 @@ select_big_mutation() {
   echo "==============================================================="
 }
 
+# Function to check if PRD has incomplete stories
+has_incomplete_stories() {
+  if [[ -f "$PRD_FILE" ]]; then
+    local incomplete=$(jq -r '.userStories[] | select(.passes == false) | .id' "$PRD_FILE" 2>/dev/null | head -1)
+    [[ -n "$incomplete" ]] && echo "true" || echo "false"
+  else
+    echo "false"
+  fi
+}
+
 # Function to generate next experiment hypothesis
 generate_next_hypothesis() {
   if [[ ! -f "$EXPERIMENTS_FILE" ]]; then
     echo "Error: experiments.json not found at $EXPERIMENTS_FILE"
     exit 1
+  fi
+
+  # Check if PRD has work to do
+  local has_work=$(has_incomplete_stories)
+  if [[ "$has_work" == "false" ]]; then
+    echo ""
+    echo "==============================================================="
+    echo "  Fitness Perfection Achieved"
+    echo "==============================================================="
+    echo ""
+    echo "  All stories in prd.json are complete (passes: true)."
+    echo "  No incomplete work to experiment on."
+    echo ""
+    echo "  To continue evolution, either:"
+    echo "    1. Create a new prd.json with fresh stories"
+    echo "    2. Reset existing stories to passes: false"
+    echo "    3. Use a different test PRD"
+    echo ""
+    echo "  Example: Reset stories with:"
+    echo "    jq '.userStories[].passes = false' prd.json > prd.json.tmp && mv prd.json.tmp prd.json"
+    echo ""
+    echo "==============================================================="
+    echo ""
+    echo "  {\"status\": \"at_ideal\", \"action_required\": \"create_new_prd\"}"
+    return 1
   fi
 
   # Check for stagnation first
@@ -267,9 +302,15 @@ generate_next_hypothesis() {
   echo ""
 
   # Calculate gaps from ideal (completion 100%, iterations 1, quality 100%)
+  # Treat negative gaps (better than ideal) as 0
   local completion_gap=$(echo "100 - $current_completion" | bc 2>/dev/null || echo "0")
   local iteration_gap=$(echo "$current_avg_iter - 1" | bc 2>/dev/null || echo "0")
   local quality_gap=$(echo "100 - $current_quality" | bc 2>/dev/null || echo "0")
+
+  # Clamp negative gaps to 0 (better than ideal = no gap)
+  completion_gap=$(echo "if ($completion_gap < 0) 0 else $completion_gap" | bc 2>/dev/null || echo "0")
+  iteration_gap=$(echo "if ($iteration_gap < 0) 0 else $iteration_gap" | bc 2>/dev/null || echo "0")
+  quality_gap=$(echo "if ($quality_gap < 0) 0 else $quality_gap" | bc 2>/dev/null || echo "0")
 
   # Identify lowest-performing metric (largest gap from ideal)
   local metric_targeted="completion_rate"
@@ -494,7 +535,16 @@ if [[ "$GENERATIONS_MODE" == "true" ]]; then
     echo ""
     echo "  Step 1: Generating hypothesis..."
     hypothesis_output=$(generate_next_hypothesis)
+    hypothesis_exit_code=$?
     echo "$hypothesis_output"
+
+    # Check if we're at ideal (no work to do)
+    if [[ "$hypothesis_exit_code" -ne 0 ]] || echo "$hypothesis_output" | grep -q '"status": "at_ideal"'; then
+      echo ""
+      echo "  Evolution stopped: No incomplete stories to work on."
+      echo "  Create a new prd.json with fresh stories to continue."
+      break
+    fi
 
     # Extract the experiment ID from hypothesis output
     local_exp_id=$(echo "$hypothesis_output" | grep -o '"experiment_id": "[^"]*"' | head -1 | sed 's/"experiment_id": "//;s/"//' || echo "")
