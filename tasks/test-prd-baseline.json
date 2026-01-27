@@ -1,0 +1,33 @@
+{
+  "project": "baseline-test",
+  "branchName": "ralph/baseline-test",
+  "description": "Test PRD for establishing baseline metrics - simple stories to verify metrics collection works",
+  "verificationCommands": {
+    "test": "echo 'tests passed'"
+  },
+  "userStories": [
+    {
+      "id": "BL-001",
+      "title": "Create test file",
+      "description": "Create a simple test file to verify the agent can complete basic tasks.",
+      "acceptanceCriteria": [
+        "File tasks/baseline-test-output.txt exists",
+        "File contains text 'Baseline test complete'"
+      ],
+      "priority": 1,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "BL-002",
+      "title": "Append to test file",
+      "description": "Append additional content to demonstrate sequential task completion.",
+      "acceptanceCriteria": [
+        "tasks/baseline-test-output.txt contains 'Story BL-002 complete'"
+      ],
+      "priority": 2,
+      "passes": false,
+      "notes": ""
+    }
+  ]
+}

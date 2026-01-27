@@ -1,0 +1,16 @@
+{
+  "version": "1.0.0",
+  "created": "2026-01-26",
+  "baseline": {
+    "completion_rate": 100,
+    "avg_iterations": 1,
+    "code_quality_rate": 100,
+    "recovery_rate": null,
+    "measured_at": "2026-01-26",
+    "test_prd": "tasks/test-prd-baseline.json",
+    "notes": "Baseline established from test suite metrics. Tests verify: 41 tests passing, metrics output working, circuit breaker functional. Real-world metrics to be collected from production runs."
+  },
+  "stagnation_count": 0,
+  "last_improvement_at": null,
+  "experiments": []
+}

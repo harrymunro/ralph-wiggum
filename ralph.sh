@@ -168,9 +168,78 @@ check_circuit_breaker() {
   return 1  # false - circuit breaker not tripped
 }
 
+# Initialize metrics tracking
+METRICS_ITERATIONS=0
+METRICS_STORIES_COMPLETED=0
+METRICS_STORIES_FAILED=0
+METRICS_QUALITY_PASSES=0
+METRICS_QUALITY_FAILS=0
+
+# Function to count completed stories
+count_completed_stories() {
+  if [ -f "$PRD_FILE" ]; then
+    jq '[.userStories[] | select(.passes == true)] | length' "$PRD_FILE" 2>/dev/null || echo "0"
+  else
+    echo "0"
+  fi
+}
+
+# Function to count total stories
+count_total_stories() {
+  if [ -f "$PRD_FILE" ]; then
+    jq '[.userStories[]] | length' "$PRD_FILE" 2>/dev/null || echo "0"
+  else
+    echo "0"
+  fi
+}
+
+# Function to count skipped stories
+count_skipped_stories() {
+  if [ -f "$PRD_FILE" ]; then
+    jq '[.userStories[] | select(.notes | contains("Skipped"))] | length' "$PRD_FILE" 2>/dev/null || echo "0"
+  else
+    echo "0"
+  fi
+}
+
+# Function to output metrics summary
+output_metrics_summary() {
+  local completed=$(count_completed_stories)
+  local total=$(count_total_stories)
+  local skipped=$(count_skipped_stories)
+  local completion_rate=0
+
+  if [ "$total" -gt 0 ]; then
+    completion_rate=$(echo "scale=2; $completed * 100 / $total" | bc 2>/dev/null || echo "0")
+  fi
+
+  echo ""
+  echo "==============================================================="
+  echo "  Ralph Metrics Summary"
+  echo "==============================================================="
+  echo ""
+  echo "  Stories:"
+  echo "    - Completed: $completed / $total"
+  echo "    - Skipped:   $skipped"
+  echo "    - Completion Rate: ${completion_rate}%"
+  echo ""
+  echo "  Iterations:"
+  echo "    - Total iterations: $METRICS_ITERATIONS"
+  if [ "$completed" -gt 0 ]; then
+    local avg_iterations=$(echo "scale=2; $METRICS_ITERATIONS / $completed" | bc 2>/dev/null || echo "N/A")
+    echo "    - Avg iterations per story: $avg_iterations"
+  fi
+  echo ""
+  echo "==============================================================="
+}
+
 echo "Starting Ralph - Max iterations: $MAX_ITERATIONS - Max attempts per story: $MAX_ATTEMPTS_PER_STORY"
 
+# Record initial completed count to track progress
+INITIAL_COMPLETED=$(count_completed_stories)
+
 for i in $(seq 1 $MAX_ITERATIONS); do
+  METRICS_ITERATIONS=$i
   echo ""
   echo "==============================================================="
   echo "  Ralph Iteration $i of $MAX_ITERATIONS"
@@ -228,6 +297,7 @@ for i in $(seq 1 $MAX_ITERATIONS); do
       echo ""
       echo "Ralph completed all tasks!"
       echo "Completed at iteration $i of $MAX_ITERATIONS"
+      output_metrics_summary
       exit 0
     else
       echo ""
@@ -248,4 +318,5 @@ done
 echo ""
 echo "Ralph reached max iterations ($MAX_ITERATIONS) without completing all tasks."
 echo "Check $PROGRESS_FILE for status."
+output_metrics_summary
 exit 1
