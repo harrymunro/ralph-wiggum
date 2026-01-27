@@ -534,8 +534,8 @@ if [[ "$GENERATIONS_MODE" == "true" ]]; then
     # Step 1: Generate hypothesis for this generation
     echo ""
     echo "  Step 1: Generating hypothesis..."
-    hypothesis_output=$(generate_next_hypothesis)
-    hypothesis_exit_code=$?
+    # Capture output and exit code (|| true prevents set -e from exiting)
+    hypothesis_output=$(generate_next_hypothesis) && hypothesis_exit_code=0 || hypothesis_exit_code=$?
     echo "$hypothesis_output"
 
     # Check if we're at ideal (no work to do)
