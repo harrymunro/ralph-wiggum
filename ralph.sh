@@ -542,7 +542,7 @@ if [[ "$GENERATIONS_MODE" == "true" ]]; then
     echo "  Step 3: Results recorded to experiments.json"
 
     # Check outcome for next generation planning
-    local outcome=$(get_last_experiment_outcome)
+    outcome=$(get_last_experiment_outcome)
     echo "  Experiment outcome: $outcome"
 
     echo ""
@@ -603,7 +603,7 @@ if [[ "$EXPERIMENT_MODE" == "true" ]]; then
   echo "  Experiment ID: $EXPERIMENT_ID"
 
   # Create experiment feature branch
-  EXPERIMENT_BRANCH="ralph/experiment-${EXPERIMENT_ID,,}"
+  EXPERIMENT_BRANCH="ralph/experiment-$(echo "$EXPERIMENT_ID" | tr '[:upper:]' '[:lower:]')"
   CURRENT_GIT_BRANCH=$(git branch --show-current 2>/dev/null || echo "")
 
   if [[ -n "$CURRENT_GIT_BRANCH" ]]; then
