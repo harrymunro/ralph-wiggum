@@ -11,6 +11,10 @@ SKIP_SECURITY="${SKIP_SECURITY_CHECK:-false}"
 EXPERIMENT_MODE="false"
 EXPERIMENT_ID=""
 NEXT_EXPERIMENT_MODE="false"
+GENERATIONS_MODE="false"
+GENERATIONS_COUNT=0
+CONSECUTIVE_FAILURES=0
+MAX_CONSECUTIVE_FAILURES=3
 
 while [[ $# -gt 0 ]]; do
   case $1 in
@@ -29,6 +33,17 @@ while [[ $# -gt 0 ]]; do
       ;;
     --next-experiment)
       NEXT_EXPERIMENT_MODE="true"
+      shift
+      ;;
+    --generations)
+      GENERATIONS_MODE="true"
+      # Check if next argument is a number (generation count)
+      if [[ -n "${2:-}" && "$2" =~ ^[0-9]+$ ]]; then
+        GENERATIONS_COUNT="$2"
+        shift
+      else
+        GENERATIONS_COUNT=3  # Default to 3 generations
+      fi
       shift
       ;;
     *)
@@ -318,9 +333,247 @@ generate_next_hypothesis() {
   echo ""
 }
 
+# Function to run a single experiment generation
+run_experiment_generation() {
+  local generation_num="$1"
+  local experiment_id="$2"
+
+  echo ""
+  echo "###############################################################"
+  echo "  Generation $generation_num: Running Experiment $experiment_id"
+  echo "###############################################################"
+  echo ""
+
+  # Run the experiment using the existing experiment mode
+  # We use a subshell to avoid polluting our state
+  local experiment_result
+  experiment_result=$("$0" --experiment "$experiment_id" --skip-security-check "$MAX_ITERATIONS" 2>&1) || true
+  local experiment_exit_code=$?
+
+  echo "$experiment_result"
+
+  # Check if experiment completed successfully
+  if [[ "$experiment_result" == *"Ralph completed all tasks"* ]]; then
+    return 0  # Success
+  elif [[ "$experiment_result" == *"Ralph reached max iterations"* ]]; then
+    return 1  # Failure - max iterations
+  else
+    return 2  # Failure - other error
+  fi
+}
+
+# Function to get the experiment outcome from experiments.json
+get_last_experiment_outcome() {
+  if [[ -f "$EXPERIMENTS_FILE" ]]; then
+    local delta_fitness=$(jq -r '.experiments[-1].delta_fitness // 0' "$EXPERIMENTS_FILE")
+    local improved=$(echo "$delta_fitness > 0" | bc -l 2>/dev/null || echo "0")
+    if [[ "$improved" -eq 1 ]]; then
+      echo "improved"
+    else
+      echo "no_improvement"
+    fi
+  else
+    echo "unknown"
+  fi
+}
+
+# Function to generate summary report for multi-generation run
+generate_generation_summary() {
+  local total_generations="$1"
+  local successful_generations="$2"
+  local failed_generations="$3"
+
+  local summary_file="$SCRIPT_DIR/docs/experiments/generation-summary.md"
+  mkdir -p "$(dirname "$summary_file")"
+
+  local summary_date=$(date +%Y-%m-%d)
+  local summary_time=$(date +%H:%M:%S)
+
+  # Gather experiment data from experiments.json
+  local experiments_data=""
+  if [[ -f "$EXPERIMENTS_FILE" ]]; then
+    experiments_data=$(jq -r '.experiments[-'"$total_generations"':][] | "| \(.id) | \(.date) | \(.metrics.completion_rate)% | \(.metrics.avg_iterations) | \(.metrics.code_quality_rate)% | \(.delta_fitness) | \(.outcome) |"' "$EXPERIMENTS_FILE" 2>/dev/null || echo "| N/A | N/A | N/A | N/A | N/A | N/A | N/A |")
+  fi
+
+  # Read final metrics
+  local final_completion=$(jq -r '.experiments[-1].metrics.completion_rate // "N/A"' "$EXPERIMENTS_FILE" 2>/dev/null || echo "N/A")
+  local final_avg_iter=$(jq -r '.experiments[-1].metrics.avg_iterations // "N/A"' "$EXPERIMENTS_FILE" 2>/dev/null || echo "N/A")
+  local final_quality=$(jq -r '.experiments[-1].metrics.code_quality_rate // "N/A"' "$EXPERIMENTS_FILE" 2>/dev/null || echo "N/A")
+
+  # Read baseline metrics
+  local baseline_completion=$(jq -r '.baseline.completion_rate // "N/A"' "$EXPERIMENTS_FILE" 2>/dev/null || echo "N/A")
+  local baseline_avg_iter=$(jq -r '.baseline.avg_iterations // "N/A"' "$EXPERIMENTS_FILE" 2>/dev/null || echo "N/A")
+  local baseline_quality=$(jq -r '.baseline.code_quality_rate // "N/A"' "$EXPERIMENTS_FILE" 2>/dev/null || echo "N/A")
+
+  # Get current stagnation count
+  local stagnation_count=$(jq -r '.stagnation_count // 0' "$EXPERIMENTS_FILE" 2>/dev/null || echo "0")
+
+  cat > "$summary_file" << EOF
+# Generation Summary Report
+
+**Generated:** $summary_date at $summary_time
+
+## Overview
+
+- **Total Generations Run:** $total_generations
+- **Successful Generations:** $successful_generations
+- **Failed Generations:** $failed_generations
+- **Success Rate:** $(echo "scale=1; $successful_generations * 100 / $total_generations" | bc 2>/dev/null || echo "N/A")%
+
+## Metrics Summary
+
+### Baseline vs Final
+
+| Metric | Baseline | Final | Change |
+|--------|----------|-------|--------|
+| Completion Rate | ${baseline_completion}% | ${final_completion}% | $(echo "scale=2; $final_completion - $baseline_completion" | bc 2>/dev/null || echo "N/A")% |
+| Avg Iterations | ${baseline_avg_iter} | ${final_avg_iter} | $(echo "scale=2; $final_avg_iter - $baseline_avg_iter" | bc 2>/dev/null || echo "N/A") |
+| Code Quality Rate | ${baseline_quality}% | ${final_quality}% | $(echo "scale=2; $final_quality - $baseline_quality" | bc 2>/dev/null || echo "N/A")% |
+
+### Experiments Run
+
+| Experiment ID | Date | Completion | Avg Iter | Quality | Fitness Delta | Outcome |
+|---------------|------|------------|----------|---------|---------------|---------|
+$experiments_data
+
+## Evolution Status
+
+- **Stagnation Count:** $stagnation_count (triggers big mutation at 3)
+- **Last Improvement:** $(jq -r '.last_improvement_at // "Never"' "$EXPERIMENTS_FILE" 2>/dev/null || echo "Never")
+
+## Recommendations
+
+EOF
+
+  # Add recommendations based on results
+  if [[ "$stagnation_count" -ge 3 ]]; then
+    echo "- ⚠️ **Stagnation Detected:** Consider using a big mutation from the catalog" >> "$summary_file"
+  fi
+
+  if [[ "$failed_generations" -gt "$successful_generations" ]]; then
+    echo "- ⚠️ **High Failure Rate:** Review PRD complexity and CLAUDE.md instructions" >> "$summary_file"
+  fi
+
+  if [[ "$successful_generations" -eq "$total_generations" ]]; then
+    echo "- ✅ **All Generations Successful:** System is performing well" >> "$summary_file"
+  fi
+
+  echo "" >> "$summary_file"
+  echo "---" >> "$summary_file"
+  echo "*Generated by ralph.sh --generations $total_generations*" >> "$summary_file"
+
+  echo ""
+  echo "  Generation summary written to: $summary_file"
+}
+
 # Handle --next-experiment flag
 if [[ "$NEXT_EXPERIMENT_MODE" == "true" ]]; then
   generate_next_hypothesis
+  exit 0
+fi
+
+# Handle --generations flag (multi-generation autonomous evolution)
+if [[ "$GENERATIONS_MODE" == "true" ]]; then
+  echo ""
+  echo "==============================================================="
+  echo "  Self-Directing Evolution Mode"
+  echo "  Generations to run: $GENERATIONS_COUNT"
+  echo "==============================================================="
+  echo ""
+
+  SUCCESSFUL_GENERATIONS=0
+  FAILED_GENERATIONS=0
+
+  for gen in $(seq 1 $GENERATIONS_COUNT); do
+    echo ""
+    echo "---------------------------------------------------------------"
+    echo "  Starting Generation $gen of $GENERATIONS_COUNT"
+    echo "---------------------------------------------------------------"
+
+    # Step 1: Generate hypothesis for this generation
+    echo ""
+    echo "  Step 1: Generating hypothesis..."
+    hypothesis_output=$(generate_next_hypothesis)
+    echo "$hypothesis_output"
+
+    # Extract the experiment ID from hypothesis output
+    local_exp_id=$(echo "$hypothesis_output" | grep -o '"experiment_id": "[^"]*"' | head -1 | sed 's/"experiment_id": "//;s/"//' || echo "")
+    if [[ -z "$local_exp_id" ]]; then
+      # Try to extract mutation_id for big mutations
+      local_exp_id=$(echo "$hypothesis_output" | grep -o '"mutation_id": "[^"]*"' | head -1 | sed 's/"mutation_id": "//;s/"//' || echo "")
+    fi
+
+    if [[ -z "$local_exp_id" ]]; then
+      # Generate experiment ID manually
+      if [[ -f "$EXPERIMENTS_FILE" ]]; then
+        exp_count=$(jq '.experiments | length' "$EXPERIMENTS_FILE" 2>/dev/null || echo "0")
+        local_exp_id=$(printf "EXP-%03d" $((exp_count + 1)))
+      else
+        local_exp_id="EXP-001"
+      fi
+    fi
+
+    echo ""
+    echo "  Step 2: Running experiment $local_exp_id..."
+
+    # Step 2: Run the experiment
+    if run_experiment_generation "$gen" "$local_exp_id"; then
+      echo ""
+      echo "  Generation $gen: COMPLETED SUCCESSFULLY"
+      SUCCESSFUL_GENERATIONS=$((SUCCESSFUL_GENERATIONS + 1))
+      CONSECUTIVE_FAILURES=0
+    else
+      echo ""
+      echo "  Generation $gen: FAILED"
+      FAILED_GENERATIONS=$((FAILED_GENERATIONS + 1))
+      CONSECUTIVE_FAILURES=$((CONSECUTIVE_FAILURES + 1))
+
+      # Check safety limit
+      if [[ "$CONSECUTIVE_FAILURES" -ge "$MAX_CONSECUTIVE_FAILURES" ]]; then
+        echo ""
+        echo "  ⚠️  SAFETY LIMIT REACHED: $CONSECUTIVE_FAILURES consecutive failures"
+        echo "  Stopping self-directing evolution to prevent further issues."
+        break
+      fi
+    fi
+
+    # Step 3: Record results (already done by experiment mode)
+    echo ""
+    echo "  Step 3: Results recorded to experiments.json"
+
+    # Check outcome for next generation planning
+    local outcome=$(get_last_experiment_outcome)
+    echo "  Experiment outcome: $outcome"
+
+    echo ""
+    echo "---------------------------------------------------------------"
+    echo "  Generation $gen Complete"
+    echo "  Successful: $SUCCESSFUL_GENERATIONS | Failed: $FAILED_GENERATIONS"
+    echo "---------------------------------------------------------------"
+  done
+
+  # Step 4: Generate summary report
+  echo ""
+  echo "==============================================================="
+  echo "  Self-Directing Evolution Complete"
+  echo "==============================================================="
+  echo ""
+  echo "  Total generations: $GENERATIONS_COUNT"
+  echo "  Successful: $SUCCESSFUL_GENERATIONS"
+  echo "  Failed: $FAILED_GENERATIONS"
+  echo ""
+
+  generate_generation_summary "$((SUCCESSFUL_GENERATIONS + FAILED_GENERATIONS))" "$SUCCESSFUL_GENERATIONS" "$FAILED_GENERATIONS"
+
+  echo ""
+  echo "==============================================================="
+
+  if [[ "$CONSECUTIVE_FAILURES" -ge "$MAX_CONSECUTIVE_FAILURES" ]]; then
+    echo ""
+    echo "  Evolution stopped early due to $CONSECUTIVE_FAILURES consecutive failures."
+    exit 1
+  fi
+
   exit 0
 fi
 
