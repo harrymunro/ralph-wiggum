@@ -172,3 +172,19 @@ Started: Wed Jan 28 15:58:34 AST 2026
   - Machine-verifiable criteria need explicit verification commands (grep, test -f, python -c, etc.)
   - Good vs bad examples table format helps users understand verification requirements
 ---
+
+## 2026-01-28 22:45 - US-014
+- What was implemented: End-to-end integration test for the full V-model flow
+- Files changed:
+  - tests/fixtures/prd.json (new - minimal test PRD)
+  - tests/fixtures/progress.txt (new - test progress file)
+  - tests/fixtures/sample.py (new - placeholder Python file)
+  - tests/fixtures/test_sample.py (new - placeholder test file)
+  - tests/test_integration.py (new - 19 integration tests)
+  - README.md (updated - integration test documentation)
+- **Learnings for future iterations:**
+  - Use tmp_path fixture with shutil.copytree to isolate test fixtures
+  - Integration tests should mock at module boundaries (invoke_claude, _run_validation, audit_implementation)
+  - Use deterministic mock return values for CI reproducibility
+  - Test the complete flow: execution -> PRD update -> progress append
+---
