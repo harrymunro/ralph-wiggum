@@ -127,7 +127,7 @@
         "README.md explains the three-layer validation model"
       ],
       "priority": 7,
-      "passes": false,
+      "passes": true,
       "notes": ""
     },
     {
@@ -145,7 +145,7 @@
         "Typecheck passes: python -m py_compile micro_v/auditor.py"
       ],
       "priority": 8,
-      "passes": false,
+      "passes": true,
       "notes": ""
     },
     {
@@ -162,7 +162,7 @@
         "Typecheck passes"
       ],
       "priority": 9,
-      "passes": false,
+      "passes": true,
       "notes": ""
     },
     {

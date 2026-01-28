@@ -80,3 +80,42 @@ Started: Wed Jan 28 15:58:34 AST 2026
   - Circuit breaker default is 5 retries (configurable via ExecutorConfig.max_retries)
   - The _log function prefixes all output with [executor] for clear terminal logging
 ---
+
+## 2026-01-28 19:00 - US-007
+- What was implemented: Adversarial auditor prompt template for semantic validation
+- Files changed:
+  - micro_v/prompts/auditor.md (new file - skeptical QA engineer prompt with PASS/RETRY/ESCALATE verdicts)
+  - README.md (added Three-Layer Validation Model section)
+- **Learnings for future iterations:**
+  - Auditor prompt uses {{spec}} and {{diff}} placeholders (different from coder's {{goal}}, {{files}}, {{criteria}}, {{learnings}})
+  - The three-layer model: 1) Coder implements, 2) Automated checks (typecheck/lint/test), 3) Semantic audit
+  - ESCALATE is high bar - only for spec ambiguity, not bugs (bugs are RETRY)
+  - Auditor sees only spec + diff, no context from coding session for fresh perspective
+---
+
+## 2026-01-28 19:30 - US-008
+- What was implemented: Semantic auditor module to catch green build hallucinations
+- Files changed:
+  - micro_v/auditor.py (AuditVerdict enum, AuditResult dataclass, audit_implementation function)
+  - tests/test_auditor.py (32 unit tests covering all verdict types and edge cases)
+- **Learnings for future iterations:**
+  - AuditVerdict enum mirrors the prompt format: PASS, RETRY, ESCALATE
+  - _parse_verdict() extracts verdict from Claude output using regex patterns
+  - Defaults to RETRY (conservative) if verdict cannot be parsed clearly
+  - AuditorError exception follows same pattern as ClaudeError and PRDError
+  - Invocation failure returns RETRY (not ESCALATE) to let the system try again
+  - Test pattern: mock both _load_auditor_prompt and invoke_claude to isolate logic
+---
+
+## 2026-01-28 20:00 - US-009
+- What was implemented: Semantic audit integration into executor loop
+- Files changed:
+  - micro_v/executor.py (added audit_implementation call after validation passes, PASS/RETRY/ESCALATE handling)
+  - tests/test_executor.py (added 11 new tests including 6 audit integration tests)
+- **Learnings for future iterations:**
+  - ExecutorConfig now has enable_audit (bool) to toggle audit on/off - useful for testing
+  - _build_spec() creates spec from story for auditor, _get_git_diff() retrieves current changes
+  - Audit retries use same circuit breaker as validation failures (max_retries applies to total iterations)
+  - When adding new features to executor, update default_config fixture to disable new features for existing tests
+  - Auditor feedback is included in error_context for next coder iteration (prefixed with "Semantic audit requested changes:")
+---
