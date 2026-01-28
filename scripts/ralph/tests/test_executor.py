@@ -15,8 +15,11 @@ from micro_v.executor import (
     _load_coder_prompt,
     _format_prompt,
     _run_validation,
+    _build_spec,
+    _get_git_diff,
     _log,
 )
+from micro_v.auditor import AuditVerdict, AuditResult
 
 
 @pytest.fixture
@@ -36,15 +39,35 @@ def sample_story() -> UserStory:
 
 @pytest.fixture
 def default_config() -> ExecutorConfig:
-    """Create a default executor config for testing."""
+    """Create a default executor config for testing (with audit disabled)."""
     return ExecutorConfig(
         max_retries=5,
         validation_command="python -m pytest",
         working_dir="/test/path",
         coder_prompt_path="micro_v/prompts/coder.md",
+        auditor_prompt_path="micro_v/prompts/auditor.md",
         learnings="Some learnings",
         files_whitelist=["file1.py", "file2.py"],
         claude_timeout=300,
+        auditor_timeout=180,
+        enable_audit=False,  # Disable audit for existing tests
+    )
+
+
+@pytest.fixture
+def audit_config() -> ExecutorConfig:
+    """Create an executor config with audit enabled for testing."""
+    return ExecutorConfig(
+        max_retries=5,
+        validation_command="python -m pytest",
+        working_dir="/test/path",
+        coder_prompt_path="micro_v/prompts/coder.md",
+        auditor_prompt_path="micro_v/prompts/auditor.md",
+        learnings="Some learnings",
+        files_whitelist=["file1.py", "file2.py"],
+        claude_timeout=300,
+        auditor_timeout=180,
+        enable_audit=True,
     )
 
 
@@ -92,9 +115,12 @@ class TestExecutorConfig:
         assert config.validation_command == ""
         assert config.working_dir == "."
         assert config.coder_prompt_path == "micro_v/prompts/coder.md"
+        assert config.auditor_prompt_path == "micro_v/prompts/auditor.md"
         assert config.learnings == ""
         assert config.files_whitelist is None
         assert config.claude_timeout == 300
+        assert config.auditor_timeout == 180
+        assert config.enable_audit is True
 
     def test_custom_values(self) -> None:
         """Test custom config values."""
@@ -102,10 +128,12 @@ class TestExecutorConfig:
             max_retries=10,
             validation_command="npm test",
             working_dir="/my/dir",
+            enable_audit=False,
         )
         assert config.max_retries == 10
         assert config.validation_command == "npm test"
         assert config.working_dir == "/my/dir"
+        assert config.enable_audit is False
 
 
 class TestExecutionOutput:
@@ -522,3 +550,252 @@ class TestLog:
         _log("Test message")
 
         mock_print.assert_called_once_with("[executor] Test message")
+
+
+class TestBuildSpec:
+    """Tests for _build_spec function."""
+
+    def test_builds_spec_with_story_details(self, sample_story: UserStory) -> None:
+        """Test that spec includes story ID and title."""
+        result = _build_spec(sample_story)
+
+        assert "US-001: Test Story" in result
+        assert "A test user story for testing" in result
+
+    def test_builds_spec_with_criteria(self, sample_story: UserStory) -> None:
+        """Test that spec includes acceptance criteria."""
+        result = _build_spec(sample_story)
+
+        assert "- Criterion 1" in result
+        assert "- Criterion 2" in result
+
+
+class TestGetGitDiff:
+    """Tests for _get_git_diff function."""
+
+    @patch("micro_v.executor.subprocess.run")
+    def test_returns_diff_on_success(self, mock_run: MagicMock) -> None:
+        """Test that git diff output is returned."""
+        mock_run.return_value = MagicMock(
+            returncode=0, stdout="diff --git a/file.py b/file.py\n+new line"
+        )
+
+        result = _get_git_diff("/test")
+
+        assert "diff --git" in result
+        mock_run.assert_called_once()
+
+    @patch("micro_v.executor.subprocess.run")
+    def test_returns_empty_on_failure(self, mock_run: MagicMock) -> None:
+        """Test that empty string is returned on git failure."""
+        mock_run.return_value = MagicMock(returncode=1, stdout="")
+
+        result = _get_git_diff("/test")
+
+        assert result == ""
+
+    @patch("micro_v.executor.subprocess.run")
+    def test_returns_empty_on_exception(self, mock_run: MagicMock) -> None:
+        """Test that empty string is returned on exception."""
+        mock_run.side_effect = Exception("Git not found")
+
+        result = _get_git_diff("/test")
+
+        assert result == ""
+
+
+class TestAuditIntegration:
+    """Tests for semantic audit integration in execute_story."""
+
+    @patch("micro_v.executor._get_git_diff")
+    @patch("micro_v.executor.audit_implementation")
+    @patch("micro_v.executor._run_validation")
+    @patch("micro_v.executor.invoke_claude")
+    @patch("micro_v.executor._load_coder_prompt")
+    def test_audit_pass_through_returns_success(
+        self,
+        mock_load: MagicMock,
+        mock_claude: MagicMock,
+        mock_validate: MagicMock,
+        mock_audit: MagicMock,
+        mock_diff: MagicMock,
+        sample_story: UserStory,
+        audit_config: ExecutorConfig,
+    ) -> None:
+        """Test that PASS verdict from auditor returns success."""
+        mock_load.return_value = "{{goal}}{{files}}{{criteria}}{{learnings}}"
+        mock_claude.return_value = ("Code written", "", 0)
+        mock_validate.return_value = (True, "Tests passed")
+        mock_diff.return_value = "diff content"
+        mock_audit.return_value = AuditResult(verdict=AuditVerdict.PASS)
+
+        result = execute_story(sample_story, audit_config)
+
+        assert result.result == ExecutionResult.SUCCESS
+        assert result.iterations == 1
+        mock_audit.assert_called_once()
+
+    @patch("micro_v.executor._get_git_diff")
+    @patch("micro_v.executor.audit_implementation")
+    @patch("micro_v.executor._run_validation")
+    @patch("micro_v.executor.invoke_claude")
+    @patch("micro_v.executor._load_coder_prompt")
+    def test_audit_retry_loops_with_feedback(
+        self,
+        mock_load: MagicMock,
+        mock_claude: MagicMock,
+        mock_validate: MagicMock,
+        mock_audit: MagicMock,
+        mock_diff: MagicMock,
+        sample_story: UserStory,
+        audit_config: ExecutorConfig,
+    ) -> None:
+        """Test that RETRY verdict from auditor triggers retry with feedback."""
+        mock_load.return_value = "{{goal}}{{files}}{{criteria}}{{learnings}}"
+        mock_claude.return_value = ("Code written", "", 0)
+        mock_validate.return_value = (True, "Tests passed")
+        mock_diff.return_value = "diff content"
+        # First audit: RETRY, second audit: PASS
+        mock_audit.side_effect = [
+            AuditResult(verdict=AuditVerdict.RETRY, feedback="Missing error handling"),
+            AuditResult(verdict=AuditVerdict.PASS),
+        ]
+
+        result = execute_story(sample_story, audit_config)
+
+        assert result.result == ExecutionResult.SUCCESS
+        assert result.iterations == 2
+        assert mock_audit.call_count == 2
+        # Check feedback was included in next iteration prompt
+        second_call_prompt = mock_claude.call_args_list[1][1]["prompt"]
+        assert "Missing error handling" in second_call_prompt
+
+    @patch("micro_v.executor._get_git_diff")
+    @patch("micro_v.executor.audit_implementation")
+    @patch("micro_v.executor._run_validation")
+    @patch("micro_v.executor.invoke_claude")
+    @patch("micro_v.executor._load_coder_prompt")
+    def test_audit_escalate_returns_escalated(
+        self,
+        mock_load: MagicMock,
+        mock_claude: MagicMock,
+        mock_validate: MagicMock,
+        mock_audit: MagicMock,
+        mock_diff: MagicMock,
+        sample_story: UserStory,
+        audit_config: ExecutorConfig,
+    ) -> None:
+        """Test that ESCALATE verdict returns escalated result."""
+        mock_load.return_value = "{{goal}}{{files}}{{criteria}}{{learnings}}"
+        mock_claude.return_value = ("Code written", "", 0)
+        mock_validate.return_value = (True, "Tests passed")
+        mock_diff.return_value = "diff content"
+        mock_audit.return_value = AuditResult(
+            verdict=AuditVerdict.ESCALATE, reason="Spec is ambiguous about error handling"
+        )
+
+        result = execute_story(sample_story, audit_config)
+
+        assert result.result == ExecutionResult.ESCALATED
+        assert result.iterations == 1
+        assert "ambiguous" in result.escalation_reason.lower()
+
+    @patch("micro_v.executor._get_git_diff")
+    @patch("micro_v.executor.audit_implementation")
+    @patch("micro_v.executor._run_validation")
+    @patch("micro_v.executor.invoke_claude")
+    @patch("micro_v.executor._load_coder_prompt")
+    def test_audit_retries_count_toward_circuit_breaker(
+        self,
+        mock_load: MagicMock,
+        mock_claude: MagicMock,
+        mock_validate: MagicMock,
+        mock_audit: MagicMock,
+        mock_diff: MagicMock,
+        sample_story: UserStory,
+    ) -> None:
+        """Test that audit retries count toward max_retries limit."""
+        config = ExecutorConfig(
+            max_retries=3, validation_command="pytest", enable_audit=True
+        )
+        mock_load.return_value = "{{goal}}{{files}}{{criteria}}{{learnings}}"
+        mock_claude.return_value = ("Code written", "", 0)
+        mock_validate.return_value = (True, "Tests passed")
+        mock_diff.return_value = "diff content"
+        # Auditor always returns RETRY
+        mock_audit.return_value = AuditResult(
+            verdict=AuditVerdict.RETRY, feedback="Still not right"
+        )
+
+        result = execute_story(sample_story, config)
+
+        assert result.result == ExecutionResult.FAILED
+        assert result.iterations == 3
+        assert mock_audit.call_count == 3
+        assert "Semantic audit requested changes" in result.last_error
+
+    @patch("micro_v.executor._get_git_diff")
+    @patch("micro_v.executor.audit_implementation")
+    @patch("micro_v.executor._run_validation")
+    @patch("micro_v.executor.invoke_claude")
+    @patch("micro_v.executor._load_coder_prompt")
+    def test_mixed_validation_and_audit_failures(
+        self,
+        mock_load: MagicMock,
+        mock_claude: MagicMock,
+        mock_validate: MagicMock,
+        mock_audit: MagicMock,
+        mock_diff: MagicMock,
+        sample_story: UserStory,
+    ) -> None:
+        """Test mixed failures from validation and audit count toward limit."""
+        config = ExecutorConfig(
+            max_retries=4, validation_command="pytest", enable_audit=True
+        )
+        mock_load.return_value = "{{goal}}{{files}}{{criteria}}{{learnings}}"
+        mock_claude.return_value = ("Code written", "", 0)
+        mock_diff.return_value = "diff content"
+        # Iteration 1: validation fails
+        # Iteration 2: validation passes, audit RETRYs
+        # Iteration 3: validation passes, audit RETRYs
+        # Iteration 4: validation passes, audit PASSes
+        mock_validate.side_effect = [
+            (False, "Test failed"),
+            (True, "Tests passed"),
+            (True, "Tests passed"),
+            (True, "Tests passed"),
+        ]
+        mock_audit.side_effect = [
+            AuditResult(verdict=AuditVerdict.RETRY, feedback="Fix X"),
+            AuditResult(verdict=AuditVerdict.RETRY, feedback="Fix Y"),
+            AuditResult(verdict=AuditVerdict.PASS),
+        ]
+
+        result = execute_story(sample_story, config)
+
+        assert result.result == ExecutionResult.SUCCESS
+        assert result.iterations == 4
+        assert mock_validate.call_count == 4
+        assert mock_audit.call_count == 3  # Only called when validation passes
+
+    @patch("micro_v.executor._run_validation")
+    @patch("micro_v.executor.invoke_claude")
+    @patch("micro_v.executor._load_coder_prompt")
+    def test_audit_disabled_skips_audit(
+        self,
+        mock_load: MagicMock,
+        mock_claude: MagicMock,
+        mock_validate: MagicMock,
+        sample_story: UserStory,
+        default_config: ExecutorConfig,
+    ) -> None:
+        """Test that audit is skipped when enable_audit=False."""
+        mock_load.return_value = "{{goal}}{{files}}{{criteria}}{{learnings}}"
+        mock_claude.return_value = ("Code written", "", 0)
+        mock_validate.return_value = (True, "Tests passed")
+
+        with patch("micro_v.executor.audit_implementation") as mock_audit:
+            result = execute_story(sample_story, default_config)
+
+            assert result.result == ExecutionResult.SUCCESS
+            mock_audit.assert_not_called()

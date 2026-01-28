@@ -1,7 +1,7 @@
 """Micro-V executor loop module for V-Ralph.
 
-Implements the core retry loop that writes code and runs validation.
-This version does not include the semantic auditor (added in US-008/009).
+Implements the core retry loop that writes code and runs validation,
+including semantic audit as the third validation layer.
 """
 
 import subprocess
@@ -12,6 +12,7 @@ from typing import Optional
 
 from shared.claude import invoke_claude
 from shared.prd import UserStory
+from micro_v.auditor import audit_implementation, AuditVerdict, AuditResult
 
 
 class ExecutionResult(Enum):
@@ -30,9 +31,12 @@ class ExecutorConfig:
     validation_command: str = ""
     working_dir: str = "."
     coder_prompt_path: str = "micro_v/prompts/coder.md"
+    auditor_prompt_path: str = "micro_v/prompts/auditor.md"
     learnings: str = ""
     files_whitelist: list[str] | None = None
     claude_timeout: int = 300
+    auditor_timeout: int = 180
+    enable_audit: bool = True
 
 
 @dataclass
@@ -109,6 +113,50 @@ def _format_prompt(
     result = result.replace("{{learnings}}", learnings_text)
 
     return result
+
+
+def _build_spec(story: UserStory) -> str:
+    """Build the specification string for the auditor.
+
+    Args:
+        story: The user story being implemented.
+
+    Returns:
+        A formatted specification string with story details and criteria.
+    """
+    criteria = "\n".join(f"- {c}" for c in story.acceptanceCriteria)
+    return f"""# {story.id}: {story.title}
+
+## Description
+{story.description}
+
+## Acceptance Criteria
+{criteria}
+"""
+
+
+def _get_git_diff(working_dir: str) -> str:
+    """Get the git diff of staged and unstaged changes.
+
+    Args:
+        working_dir: Working directory for the git command.
+
+    Returns:
+        The git diff output, or empty string on error.
+    """
+    try:
+        # Get both staged and unstaged changes
+        result = subprocess.run(
+            "git diff HEAD",
+            shell=True,
+            cwd=working_dir,
+            capture_output=True,
+            text=True,
+            timeout=30,
+        )
+        return result.stdout if result.returncode == 0 else ""
+    except Exception:
+        return ""
 
 
 def _run_validation(command: str, working_dir: str) -> tuple[bool, str]:
@@ -222,17 +270,58 @@ def execute_story(
             config.working_dir,
         )
 
-        if validation_passed:
-            _log("Validation PASSED")
+        if not validation_passed:
+            _log("Validation FAILED")
+            _log(f"Output: {validation_output[:500]}...")  # Truncate for logging
+            error_context = validation_output
+            continue
+
+        _log("Validation PASSED")
+
+        # If audit is disabled, return success immediately
+        if not config.enable_audit:
+            _log("Audit disabled, returning success")
             return ExecutionOutput(
                 result=ExecutionResult.SUCCESS,
                 story_id=story.id,
                 iterations=iterations,
             )
-        else:
-            _log("Validation FAILED")
-            _log(f"Output: {validation_output[:500]}...")  # Truncate for logging
-            error_context = validation_output
+
+        # Run semantic audit (third validation layer)
+        _log("Running semantic audit...")
+        spec = _build_spec(story)
+        diff = _get_git_diff(config.working_dir)
+
+        if not diff:
+            _log("Warning: No git diff available for audit")
+
+        audit_result = audit_implementation(
+            spec=spec,
+            diff=diff,
+            prompt_path=config.auditor_prompt_path,
+            timeout=config.auditor_timeout,
+            working_dir=config.working_dir,
+        )
+
+        if audit_result.verdict == AuditVerdict.PASS:
+            _log("Audit PASSED")
+            return ExecutionOutput(
+                result=ExecutionResult.SUCCESS,
+                story_id=story.id,
+                iterations=iterations,
+            )
+        elif audit_result.verdict == AuditVerdict.ESCALATE:
+            _log(f"Audit ESCALATED: {audit_result.reason}")
+            return ExecutionOutput(
+                result=ExecutionResult.ESCALATED,
+                story_id=story.id,
+                iterations=iterations,
+                escalation_reason=audit_result.reason,
+            )
+        else:  # RETRY
+            _log(f"Audit RETRY: {audit_result.feedback[:200]}...")
+            # Include auditor feedback in error context for next iteration
+            error_context = f"Semantic audit requested changes:\n{audit_result.feedback}"
 
     # Circuit breaker triggered
     _log(f"Circuit breaker: max retries ({config.max_retries}) exceeded")
