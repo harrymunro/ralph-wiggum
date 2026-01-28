@@ -32,6 +32,37 @@ python v_ralph.py status
 python v_ralph.py run
 ```
 
+### Status Command
+
+The `status` command displays the current state of all user stories in a formatted table.
+
+```bash
+# Show status of all stories (reads prd.json from current directory)
+python v_ralph.py status
+
+# Specify a custom PRD file path
+python v_ralph.py status --prd /path/to/prd.json
+```
+
+**Output includes:**
+- Project name and branch name from the PRD
+- Table with columns: ID, Title, Status (pass/fail/escalated), Attempts
+- Progress summary showing X/Y stories complete
+
+**Example output:**
+```
+Project: V-Ralph
+Branch: ralph/v-ralph
+
+ID      Title                                      Status     Attempts
+----------------------------------------------------------------------
+US-001  Project scaffolding and CLI entry point    pass       0
+US-002  prd.yml read/write module                  pass       0
+US-003  Claude CLI wrapper                         fail       2
+
+Progress: 2/3 stories complete
+```
+
 ### Project Structure
 
 ```
