@@ -1,0 +1,82 @@
+# Ralph Progress Log
+Started: Wed Jan 28 15:58:34 AST 2026
+
+## Codebase Patterns
+- Use `python3` not `python` for all CLI commands on macOS
+- Directory structure: macro_v/, micro_v/, shared/, tests/ with __init__.py in each
+- CLI uses argparse with subparsers for run/status commands
+---
+
+## 2026-01-28 16:00 - US-001
+- What was implemented: Basic project scaffolding and CLI entry point
+- Files changed:
+  - v_ralph.py (main CLI with --help, --version, run, status subcommands)
+  - macro_v/__init__.py, micro_v/__init__.py, shared/__init__.py, tests/__init__.py (module init files)
+  - README.md (installation and basic usage documentation)
+- **Learnings for future iterations:**
+  - Use `python3` command not `python` on macOS (python may not be in PATH)
+  - The prd.json uses JSON format, not YAML as mentioned in some story descriptions
+  - Working directory is scripts/ralph/ within the ralph-wiggum repo
+---
+
+## 2026-01-28 16:15 - US-002
+- What was implemented: PRD read/write module with typed dataclasses
+- Files changed:
+  - shared/prd.py (load_prd, save_prd, get_pending_stories, mark_story_passed, increment_attempts)
+  - tests/test_prd.py (16 unit tests covering all functions)
+- **Learnings for future iterations:**
+  - pytest must be installed (`pip3 install pytest`)
+  - Use `from shared.prd import ...` for imports when running tests from scripts/ralph/
+  - The PRD module uses dataclasses for typed data structures: PRD, UserStory, VerificationCommands
+  - PRDError exception for graceful error handling
+---
+
+## 2026-01-28 16:30 - US-003
+- What was implemented: Claude CLI wrapper module for spawning stateless Claude instances
+- Files changed:
+  - shared/claude.py (invoke_claude function with subprocess handling)
+  - tests/test_claude.py (19 unit tests mocking subprocess)
+- **Learnings for future iterations:**
+  - Use subprocess.Popen with communicate() for timeout support
+  - Always call wait() after terminate/kill to reap zombie processes
+  - Handle FileNotFoundError when 'claude' command not in PATH
+  - The module provides ClaudeResult dataclass and ClaudeError exception for consistency with prd.py patterns
+---
+
+## 2026-01-28 17:45 - US-004
+- What was implemented: Two-tier progress tracking module with load_learnings and append_progress functions
+- Files changed:
+  - shared/progress.py (ProgressContext dataclass, load_learnings, append_progress, helper functions)
+  - tests/test_progress.py (24 unit tests covering two-tier loading, appending, and edge cases)
+- **Learnings for future iterations:**
+  - Use `"- "` (with space) to match bullet points but not `---` separators
+  - History entries start with `## YYYY-MM-DD` format to distinguish from other ## headers
+  - The ProgressContext dataclass follows the same pattern as other modules
+  - Template structure includes both "Codebase Patterns" and "Recent History" sections
+---
+
+## 2026-01-28 18:10 - US-005
+- What was implemented: Coder prompt template with all required placeholders and instructions
+- Files changed:
+  - micro_v/prompts/coder.md (new file - coder agent instructions with {{goal}}, {{files}}, {{criteria}}, {{learnings}} placeholders)
+  - README.md (added Prompt Customization section documenting template usage)
+- **Learnings for future iterations:**
+  - Prompt templates live in micro_v/prompts/ directory
+  - The four placeholders are filled at runtime by the executor
+  - Forbidden shortcuts section prevents agents from using quality-bypassing hacks
+  - README customization section shows how to modify prompts while preserving required placeholders
+---
+
+## 2026-01-28 18:30 - US-006
+- What was implemented: Micro-V executor loop with retry mechanism and circuit breaker
+- Files changed:
+  - micro_v/executor.py (execute_story function with retry loop, ExecutionResult enum, ExecutorConfig and ExecutionOutput dataclasses)
+  - tests/test_executor.py (31 unit tests covering success, failure, circuit breaker paths)
+- **Learnings for future iterations:**
+  - The executor uses invoke_claude from shared/claude.py for Claude CLI interactions
+  - ExecutionResult enum has SUCCESS, FAILED, and ESCALATED values (ESCALATED used by auditor in US-008)
+  - Validation runs via subprocess.run with shell=True (120s timeout)
+  - Error context from failed validations is passed to the next iteration via the prompt
+  - Circuit breaker default is 5 retries (configurable via ExecutorConfig.max_retries)
+  - The _log function prefixes all output with [executor] for clear terminal logging
+---
