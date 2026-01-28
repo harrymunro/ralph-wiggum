@@ -133,3 +133,15 @@ Started: Wed Jan 28 15:58:34 AST 2026
   - File existence must be checked before git diff (non-existent files in whitelist are silently skipped)
   - Commit message format is enforced: "feat: {story_id} - {title}"
 ---
+
+## 2026-01-28 21:00 - US-011
+- What was implemented: Status command to display story progress in formatted table
+- Files changed:
+  - v_ralph.py (added cmd_status function with PRD loading, table formatting, and progress summary)
+  - README.md (added Status Command documentation section with usage examples)
+- **Learnings for future iterations:**
+  - Use DEFAULT_PRD_PATH = Path(__file__).parent / "prd.json" for relative default paths
+  - The status command falls back to prd.yml if prd.json doesn't exist (same as other tools)
+  - Table formatting uses f-strings with width specifiers for alignment
+  - UserStory dataclass doesn't have an 'escalated' field yet - check with hasattr before use
+---
