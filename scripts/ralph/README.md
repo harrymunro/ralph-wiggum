@@ -46,6 +46,33 @@ scripts/ralph/
 └── README.md         # This file
 ```
 
+## Three-Layer Validation Model
+
+V-Ralph implements a rigorous three-layer validation approach to ensure code quality:
+
+### Layer 1: Coder Implementation
+The coding agent implements the user story according to the acceptance criteria. It writes code, updates documentation, and follows project patterns.
+
+### Layer 2: Automated Validation
+After implementation, automated checks run:
+- Type checking (e.g., `python -m py_compile`)
+- Linting (e.g., `npm run lint`)
+- Test suite (e.g., `pytest`)
+
+A green build is necessary but not sufficient - it proves the code runs, not that it's correct.
+
+### Layer 3: Semantic Audit
+A separate, stateless Claude instance reviews the implementation as an adversarial QA engineer. The auditor:
+- Only sees the spec and the diff (no context from the coding session)
+- Checks if the implementation satisfies the **spirit** of the spec, not just the letter
+- Looks for edge cases, unstated assumptions, and quality red flags
+- Returns one of three verdicts:
+  - **PASS** - Implementation is correct, proceed to commit
+  - **RETRY** - Found fixable issues, loop back to coder with feedback
+  - **ESCALATE** - Spec ambiguity requires human input, stop the loop
+
+This three-layer approach catches "green build hallucinations" where code compiles and tests pass but doesn't actually solve the problem.
+
 ## Prompt Customization
 
 V-Ralph uses template-based prompts that can be customized for different project needs.
@@ -55,6 +82,7 @@ V-Ralph uses template-based prompts that can be customized for different project
 Prompt templates are located in `micro_v/prompts/`:
 
 - **`coder.md`** - Instructions for the coding agent that implements user stories
+- **`auditor.md`** - Instructions for the semantic auditor that reviews implementations
 
 ### Template Placeholders
 
