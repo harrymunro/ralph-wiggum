@@ -228,8 +228,45 @@ The planning skill is at `.claude/skills/v-ralph-planning/SKILL.md` and can be c
 ### Running Tests
 
 ```bash
+# Run all tests
 python -m pytest tests/ -v
+
+# Run only unit tests (faster)
+python -m pytest tests/ -v --ignore=tests/test_integration.py
+
+# Run only integration tests
+python -m pytest tests/test_integration.py -v
 ```
+
+### Integration Tests
+
+The integration tests in `tests/test_integration.py` verify the complete V-model flow with mocked Claude calls. These tests are designed for CI environments with deterministic behavior.
+
+**What they test:**
+1. Story execution with mocked Claude coder
+2. Validation pass/retry flow
+3. Semantic audit pass/retry/escalate verdicts
+4. PRD update (marking stories as passed)
+5. Progress file updates
+
+**Test fixtures:**
+
+The `tests/fixtures/` directory contains a minimal project for testing:
+- `prd.json` - Simple PRD with one test story
+- `progress.txt` - Progress file with patterns
+- `sample.py` - Placeholder Python file
+- `test_sample.py` - Placeholder test file
+
+**Running in CI:**
+
+The integration tests use mocked responses and don't require actual Claude CLI access:
+
+```bash
+# Run integration tests in CI
+python -m pytest tests/test_integration.py -v --tb=short
+```
+
+All mocks produce deterministic results, making tests reproducible across environments.
 
 ### Type Checking
 

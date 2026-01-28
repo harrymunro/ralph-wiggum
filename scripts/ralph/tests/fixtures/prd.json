@@ -1,0 +1,25 @@
+{
+  "project": "Test Project",
+  "branchName": "test/integration",
+  "description": "Minimal project for integration testing",
+  "verificationCommands": {
+    "typecheck": "python -m py_compile sample.py",
+    "test": "python -m pytest test_sample.py -v"
+  },
+  "userStories": [
+    {
+      "id": "TEST-001",
+      "title": "Simple function implementation",
+      "description": "As a developer, I need a simple add function for testing the V-Ralph flow.",
+      "acceptanceCriteria": [
+        "sample.py exists with add function",
+        "add(1, 2) returns 3",
+        "test_sample.py has passing test for add function"
+      ],
+      "priority": 1,
+      "passes": false,
+      "notes": "",
+      "attempts": 0
+    }
+  ]
+}

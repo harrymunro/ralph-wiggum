@@ -1,0 +1,7 @@
+# Test Progress Log
+Started: Test run
+
+## Codebase Patterns
+- Use pytest for testing
+---
+
