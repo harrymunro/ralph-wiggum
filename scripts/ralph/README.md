@@ -32,6 +32,51 @@ python v_ralph.py status
 python v_ralph.py run
 ```
 
+### Run Command
+
+The `run` command executes pending user stories autonomously.
+
+```bash
+# Execute all pending stories
+python v_ralph.py run
+
+# Execute with custom retry limit
+python v_ralph.py run --max-retries 3
+
+# Execute a specific story only
+python v_ralph.py run --story US-003
+
+# Preview what would run without executing
+python v_ralph.py run --dry-run
+
+# Specify custom PRD and progress file paths
+python v_ralph.py run --prd /path/to/prd.json --progress /path/to/progress.txt
+```
+
+**Flags:**
+
+| Flag | Description |
+|------|-------------|
+| `--prd PATH` | Path to prd.json or prd.yml file (default: prd.json in current directory) |
+| `--progress PATH` | Path to progress.txt file (default: progress.txt in current directory) |
+| `--max-retries N` | Maximum retry attempts per story (default: 5) |
+| `--story US-XXX` | Run only the specified story ID |
+| `--dry-run` | Show what would run without executing |
+
+**Exit codes:**
+
+| Code | Meaning |
+|------|---------|
+| 0 | All requested stories completed successfully (or nothing to run) |
+| 1 | Error (file not found, invalid story ID, etc.) |
+| 2 | Story escalated (requires human input) |
+
+**Behavior:**
+
+- On **success**: Commits changes, updates prd.json to mark story as passed, appends entry to progress.txt
+- On **escalation**: Stops execution immediately, displays reason, exits with code 2
+- On **circuit breaker** (max retries exceeded): Logs failure, moves to next pending story
+
 ### Status Command
 
 The `status` command displays the current state of all user stories in a formatted table.
