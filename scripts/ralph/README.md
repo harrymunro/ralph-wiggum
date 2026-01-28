@@ -46,6 +46,37 @@ scripts/ralph/
 └── README.md         # This file
 ```
 
+## Prompt Customization
+
+V-Ralph uses template-based prompts that can be customized for different project needs.
+
+### Prompt Templates
+
+Prompt templates are located in `micro_v/prompts/`:
+
+- **`coder.md`** - Instructions for the coding agent that implements user stories
+
+### Template Placeholders
+
+The coder prompt supports the following placeholders that are automatically filled at runtime:
+
+| Placeholder | Description |
+|-------------|-------------|
+| `{{goal}}` | The user story title and description |
+| `{{files}}` | Whitelist of files the agent may edit |
+| `{{criteria}}` | The acceptance criteria to satisfy |
+| `{{learnings}}` | Relevant patterns and learnings from progress.txt |
+
+### Customizing Prompts
+
+To customize the coder behavior:
+
+1. Edit `micro_v/prompts/coder.md`
+2. Keep all four placeholders (`{{goal}}`, `{{files}}`, `{{criteria}}`, `{{learnings}}`)
+3. Modify the rules and guidelines sections as needed
+
+**Important**: Do not remove the forbidden shortcuts section - it prevents agents from using quality-bypassing hacks.
+
 ## Development
 
 ### Running Tests
