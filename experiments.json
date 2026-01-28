@@ -11,6 +11,19 @@
     "notes": "Baseline established from test suite metrics. Tests verify: 41 tests passing, metrics output working, circuit breaker functional. Real-world metrics to be collected from production runs."
   },
   "stagnation_count": 0,
-  "last_improvement_at": null,
-  "experiments": []
+  "last_improvement_at": "2026-01-26",
+  "experiments": [
+    {
+      "id": "EXP-027",
+      "date": "2026-01-26",
+      "hypothesis": "Experiment run",
+      "metrics": {
+        "completion_rate": 100.00,
+        "avg_iterations": 0.16,
+        "code_quality_rate": 100.00
+      },
+      "outcome": "completed",
+      "delta_fitness": 2.80
+    }
+  ]
 }
