@@ -119,3 +119,17 @@ Started: Wed Jan 28 15:58:34 AST 2026
   - When adding new features to executor, update default_config fixture to disable new features for existing tests
   - Auditor feedback is included in error_context for next coder iteration (prefixed with "Semantic audit requested changes:")
 ---
+
+## 2026-01-28 20:30 - US-010
+- What was implemented: Git integration module for committing completed work
+- Files changed:
+  - shared/git.py (commit_story, get_staged_files, get_dirty_files, reset_staged functions with CommitResult dataclass)
+  - tests/test_git.py (34 unit tests mocking git commands)
+- **Learnings for future iterations:**
+  - Use subprocess.run with capture_output=True for simple git commands
+  - Check for changes with `git diff --name-only HEAD` for tracked files and `git ls-files --others --exclude-standard` for untracked
+  - CommitResult dataclass follows same pattern as ClaudeResult (success, sha, error fields)
+  - GitError exception follows same pattern as ClaudeError and PRDError
+  - File existence must be checked before git diff (non-existent files in whitelist are silently skipped)
+  - Commit message format is enforced: "feat: {story_id} - {title}"
+---

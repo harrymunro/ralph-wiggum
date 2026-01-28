@@ -179,7 +179,7 @@
         "Typecheck passes: python -m py_compile shared/git.py"
       ],
       "priority": 10,
-      "passes": false,
+      "passes": true,
       "notes": ""
     },
     {
