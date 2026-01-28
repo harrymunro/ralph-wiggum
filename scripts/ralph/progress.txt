@@ -158,3 +158,17 @@ Started: Wed Jan 28 15:58:34 AST 2026
   - Circuit breaker just continues to next story (no separate escalated field in UserStory)
   - args.prd and args.progress may be None, so check before using Path()
 ---
+
+## 2026-01-28 22:00 - US-013
+- What was implemented: Macro-V planning skill for Claude Code with interactive spec refinement
+- Files changed:
+  - .claude/skills/v-ralph-planning/SKILL.md (new file - planning skill for machine-verifiable specs)
+  - scripts/ralph/README.md (added Planning with V-Ralph section)
+  - .gitignore (updated to allow .claude/skills/ directory)
+- **Learnings for future iterations:**
+  - Skills use YAML frontmatter with name and description fields
+  - The .claude directory was originally ignored; updated .gitignore pattern to `!.claude/skills/` to allow skill tracking
+  - Skill triggers are listed in description field (e.g., "Triggers on: v-ralph planning, create v-ralph spec")
+  - Machine-verifiable criteria need explicit verification commands (grep, test -f, python -c, etc.)
+  - Good vs bad examples table format helps users understand verification requirements
+---
