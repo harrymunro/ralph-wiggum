@@ -181,6 +181,48 @@ To customize the coder behavior:
 
 **Important**: Do not remove the forbidden shortcuts section - it prevents agents from using quality-bypassing hacks.
 
+## Planning with V-Ralph
+
+V-Ralph includes a Claude Code skill for interactive spec refinement that produces machine-verifiable specifications.
+
+### Invoking the Planning Skill
+
+In Claude Code, use the `/v-ralph-planning` command or say "create v-ralph spec" to start planning:
+
+```
+/v-ralph-planning
+```
+
+Or trigger it naturally:
+- "v-ralph planning for my new feature"
+- "create v-ralph spec"
+- "plan for ralph"
+- "verifiable spec"
+
+### What the Planning Skill Does
+
+1. **Gathers requirements** through clarifying questions with lettered options for quick responses
+2. **Enforces verifiability** - every acceptance criterion must have a corresponding verification command
+3. **Requires mandatory elements**:
+   - Files whitelist for every story (prevents scope creep)
+   - README update criterion (keeps docs in sync)
+   - Typecheck/test pass criteria (quality gates)
+4. **Outputs valid prd.yml** ready for `v_ralph.py run`
+
+### Verifiable Criteria Examples
+
+The skill enforces machine-verifiable criteria:
+
+| Bad (Vague) | Good (Verifiable) |
+|-------------|-------------------|
+| "Works correctly" | "Returns 200 status for valid input" |
+| "Good error handling" | "Raises ValueError with message 'Invalid ID'" |
+| "Proper testing" | "tests/test_feature.py exists and passes" |
+
+### Skill Location
+
+The planning skill is at `.claude/skills/v-ralph-planning/SKILL.md` and can be customized for project-specific needs.
+
 ## Development
 
 ### Running Tests

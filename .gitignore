@@ -1,6 +1,6 @@
 # Ralph working files (generated during runs)
-prd.json
-progress.txt
+scripts/ralph/prd.json
+scripts/ralph/progress.txt
 .last-branch
 
 # Archive is optional to commit
@@ -9,5 +9,6 @@ progress.txt
 # OS files
 .DS_Store
 
-#Claude
-.claude/
+# Claude (ignore most but allow skills)
+.claude/*
+!.claude/skills/
