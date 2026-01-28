@@ -145,3 +145,16 @@ Started: Wed Jan 28 15:58:34 AST 2026
   - Table formatting uses f-strings with width specifiers for alignment
   - UserStory dataclass doesn't have an 'escalated' field yet - check with hasattr before use
 ---
+
+## 2026-01-28 21:30 - US-012
+- What was implemented: Run command with full integration for autonomous story execution
+- Files changed:
+  - v_ralph.py (added cmd_run function with story loop, dry-run mode, escalation/circuit breaker handling)
+  - README.md (added Run Command documentation with flags table and exit codes)
+- **Learnings for future iterations:**
+  - The run command integrates executor, git, progress, and PRD modules together
+  - _get_modified_files() helper finds all changed files for commit (tracked + untracked)
+  - Exit code 2 is reserved for escalation (human input required)
+  - Circuit breaker just continues to next story (no separate escalated field in UserStory)
+  - args.prd and args.progress may be None, so check before using Path()
+---
