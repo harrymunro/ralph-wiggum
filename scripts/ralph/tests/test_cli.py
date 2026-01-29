@@ -1030,3 +1030,219 @@ class TestRunDryRunValidation:
         )
         exit_code = cmd_run(args)
         assert exit_code == 0
+
+
+class TestTokenEstimation:
+    """Tests for story token estimation functionality."""
+
+    def test_estimate_story_tokens_simple(self):
+        """Test token estimation with a simple story."""
+        sys.path.insert(0, str(__file__).rsplit('/tests/', 1)[0])
+        from v_ralph import estimate_story_tokens
+
+        story = {
+            "title": "Simple Story",
+            "description": "A simple description with five words",
+        }
+        tokens = estimate_story_tokens(story)
+        # 2 words in title + 6 words in description = 8 words * 1.3 = 10.4 -> 10
+        assert tokens == 10
+
+    def test_estimate_story_tokens_with_criteria(self):
+        """Test token estimation with acceptance criteria."""
+        sys.path.insert(0, str(__file__).rsplit('/tests/', 1)[0])
+        from v_ralph import estimate_story_tokens
+
+        story = {
+            "title": "Story",
+            "description": "Description",
+            "acceptanceCriteria": [
+                "First criterion here",
+                "Second criterion here"
+            ]
+        }
+        tokens = estimate_story_tokens(story)
+        # 1 + 1 + 3 + 3 = 8 words * 1.3 = 10.4 -> 10
+        assert tokens == 10
+
+    def test_estimate_story_tokens_with_files_whitelist(self):
+        """Test token estimation includes files whitelist."""
+        sys.path.insert(0, str(__file__).rsplit('/tests/', 1)[0])
+        from v_ralph import estimate_story_tokens
+
+        story = {
+            "title": "Story",
+            "description": "Description",
+            "filesWhitelist": [
+                "src/file1.py",
+                "src/file2.py"
+            ]
+        }
+        tokens = estimate_story_tokens(story)
+        # Each file path counts as 1 word (no spaces)
+        # 1 + 1 + 1 + 1 = 4 words * 1.3 = 5.2 -> 5
+        assert tokens == 5
+
+    def test_estimate_story_tokens_empty_story(self):
+        """Test token estimation with empty story."""
+        sys.path.insert(0, str(__file__).rsplit('/tests/', 1)[0])
+        from v_ralph import estimate_story_tokens
+
+        story = {}
+        tokens = estimate_story_tokens(story)
+        assert tokens == 0
+
+    def test_estimate_story_tokens_with_all_fields(self):
+        """Test token estimation with all fields populated."""
+        sys.path.insert(0, str(__file__).rsplit('/tests/', 1)[0])
+        from v_ralph import estimate_story_tokens
+
+        story = {
+            "title": "Add Feature",
+            "description": "As a user I want this feature",
+            "acceptanceCriteria": [
+                "Criterion one",
+                "Criterion two"
+            ],
+            "filesWhitelist": [
+                "src/main.py"
+            ]
+        }
+        tokens = estimate_story_tokens(story)
+        # 2 + 7 + 2 + 2 + 1 = 14 words * 1.3 = 18.2 -> 18
+        assert tokens == 18
+
+
+class TestTokenIndicator:
+    """Tests for token indicator functionality."""
+
+    def test_get_token_indicator_under_warning(self):
+        """Test that tokens under 50% show no indicator."""
+        sys.path.insert(0, str(__file__).rsplit('/tests/', 1)[0])
+        from v_ralph import get_token_indicator, CONTEXT_WINDOW_TOKENS
+
+        # 40% of context window
+        tokens = int(CONTEXT_WINDOW_TOKENS * 0.40)
+        rich_ind, plain_ind = get_token_indicator(tokens)
+        assert rich_ind == ""
+        assert plain_ind == ""
+
+    def test_get_token_indicator_warning_level(self):
+        """Test that tokens >= 50% show warning indicator."""
+        sys.path.insert(0, str(__file__).rsplit('/tests/', 1)[0])
+        from v_ralph import get_token_indicator, CONTEXT_WINDOW_TOKENS
+
+        # 55% of context window
+        tokens = int(CONTEXT_WINDOW_TOKENS * 0.55)
+        rich_ind, plain_ind = get_token_indicator(tokens)
+        assert "LARGE" in rich_ind
+        assert "yellow" in rich_ind
+        assert plain_ind == "[!]"
+
+    def test_get_token_indicator_error_level(self):
+        """Test that tokens >= 80% show error indicator."""
+        sys.path.insert(0, str(__file__).rsplit('/tests/', 1)[0])
+        from v_ralph import get_token_indicator, CONTEXT_WINDOW_TOKENS
+
+        # 85% of context window
+        tokens = int(CONTEXT_WINDOW_TOKENS * 0.85)
+        rich_ind, plain_ind = get_token_indicator(tokens)
+        assert "TOO LARGE" in rich_ind
+        assert "red" in rich_ind
+        assert plain_ind == "[!!!]"
+
+    def test_get_token_indicator_at_threshold(self):
+        """Test that tokens at exactly 50% show warning."""
+        sys.path.insert(0, str(__file__).rsplit('/tests/', 1)[0])
+        from v_ralph import get_token_indicator, CONTEXT_WINDOW_TOKENS
+
+        # Exactly 50%
+        tokens = int(CONTEXT_WINDOW_TOKENS * 0.50)
+        rich_ind, plain_ind = get_token_indicator(tokens)
+        assert "LARGE" in rich_ind
+        assert plain_ind == "[!]"
+
+    def test_get_token_indicator_at_error_threshold(self):
+        """Test that tokens at exactly 80% show error."""
+        sys.path.insert(0, str(__file__).rsplit('/tests/', 1)[0])
+        from v_ralph import get_token_indicator, CONTEXT_WINDOW_TOKENS
+
+        # Exactly 80%
+        tokens = int(CONTEXT_WINDOW_TOKENS * 0.80)
+        rich_ind, plain_ind = get_token_indicator(tokens)
+        assert "TOO LARGE" in rich_ind
+        assert plain_ind == "[!!!]"
+
+    def test_get_token_indicator_zero_tokens(self):
+        """Test that zero tokens show no indicator."""
+        sys.path.insert(0, str(__file__).rsplit('/tests/', 1)[0])
+        from v_ralph import get_token_indicator
+
+        rich_ind, plain_ind = get_token_indicator(0)
+        assert rich_ind == ""
+        assert plain_ind == ""
+
+
+class TestEstimateFlag:
+    """Tests for the --estimate flag on status command."""
+
+    def test_estimate_flag_parsed(self):
+        """Test that --estimate flag is recognized by the parser."""
+        sys.path.insert(0, str(__file__).rsplit('/tests/', 1)[0])
+        from v_ralph import main
+
+        with patch('sys.argv', ['v_ralph', 'status', '--estimate']):
+            with patch('v_ralph.cmd_status') as mock_status:
+                mock_status.return_value = 0
+                main()
+                args = mock_status.call_args[0][0]
+                assert args.estimate is True
+
+    def test_estimate_flag_default_is_false(self):
+        """Test that --estimate flag defaults to False."""
+        sys.path.insert(0, str(__file__).rsplit('/tests/', 1)[0])
+        from v_ralph import main
+
+        with patch('sys.argv', ['v_ralph', 'status']):
+            with patch('v_ralph.cmd_status') as mock_status:
+                mock_status.return_value = 0
+                main()
+                args = mock_status.call_args[0][0]
+                assert args.estimate is False
+
+    def test_estimate_flag_in_help_output(self):
+        """Test that --estimate appears in status --help output."""
+        sys.path.insert(0, str(__file__).rsplit('/tests/', 1)[0])
+        from v_ralph import main
+
+        with patch('sys.argv', ['v_ralph', 'status', '--help']):
+            with pytest.raises(SystemExit) as exc_info:
+                with patch('sys.stdout.write') as mock_write:
+                    main()
+            # Help exits with code 0
+            assert exc_info.value.code == 0
+
+    def test_status_with_estimate_shows_tokens(self, tmp_path):
+        """Test that status --estimate shows token counts."""
+        sys.path.insert(0, str(__file__).rsplit('/tests/', 1)[0])
+        from v_ralph import cmd_status
+        import argparse
+
+        # Create a PRD with a story
+        prd_file = tmp_path / "prd.json"
+        prd_file.write_text(json.dumps({
+            "project": "Test Project",
+            "userStories": [
+                {
+                    "id": "US-001",
+                    "title": "Test Story",
+                    "description": "A test description with some words",
+                    "priority": 1,
+                    "passes": False
+                }
+            ]
+        }))
+
+        args = argparse.Namespace(prd=str(prd_file), estimate=True)
+        exit_code = cmd_status(args)
+        assert exit_code == 0

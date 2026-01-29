@@ -541,6 +541,84 @@ def get_story_badge_plain(story: Dict[str, Any]) -> str:
         return "[FAIL]"
 
 
+# Token estimation constants
+# Approximate context window size for Claude (conservative estimate)
+CONTEXT_WINDOW_TOKENS = 100000
+TOKEN_WARNING_THRESHOLD = 0.50  # 50% of context window
+TOKEN_ERROR_THRESHOLD = 0.80  # 80% of context window
+
+
+def estimate_story_tokens(story: Dict[str, Any]) -> int:
+    """Estimate the token count for a story.
+
+    Uses a simple heuristic of word count * 1.3 to estimate tokens.
+    This accounts for the fact that tokens are often smaller than words
+    due to subword tokenization.
+
+    Token count is estimated from: title + description + acceptance criteria + files whitelist
+
+    Args:
+        story: Story dictionary with title, description, acceptanceCriteria, and optionally filesWhitelist
+
+    Returns:
+        Estimated token count
+    """
+    text_parts = []
+
+    # Add title
+    title = story.get('title', '')
+    if title:
+        text_parts.append(title)
+
+    # Add description
+    description = story.get('description', '')
+    if description:
+        text_parts.append(description)
+
+    # Add acceptance criteria
+    criteria = story.get('acceptanceCriteria', [])
+    for criterion in criteria:
+        if criterion:
+            text_parts.append(criterion)
+
+    # Add files whitelist if present
+    files_whitelist = story.get('filesWhitelist', [])
+    for file_path in files_whitelist:
+        if file_path:
+            text_parts.append(file_path)
+
+    # Combine all text
+    combined_text = ' '.join(text_parts)
+
+    # Count words and apply multiplier
+    word_count = len(combined_text.split())
+    estimated_tokens = int(word_count * 1.3)
+
+    return estimated_tokens
+
+
+def get_token_indicator(tokens: int) -> tuple[str, str]:
+    """Get a token indicator based on percentage of context window.
+
+    Args:
+        tokens: Estimated token count
+
+    Returns:
+        Tuple of (rich_indicator, plain_indicator) strings
+        - Empty strings if under warning threshold
+        - Warning indicator if >= 50% of context window
+        - Error indicator if >= 80% of context window
+    """
+    percentage = tokens / CONTEXT_WINDOW_TOKENS
+
+    if percentage >= TOKEN_ERROR_THRESHOLD:
+        return ("[red]⚠ TOO LARGE[/red]", "[!!!]")
+    elif percentage >= TOKEN_WARNING_THRESHOLD:
+        return ("[yellow]⚠ LARGE[/yellow]", "[!]")
+    else:
+        return ("", "")
+
+
 def cmd_status(args: argparse.Namespace) -> int:
     """Execute the status command to show PRD status.
 
@@ -551,6 +629,8 @@ def cmd_status(args: argparse.Namespace) -> int:
         Exit code (0 for success, 1 for error)
     """
     prd_path = args.prd
+    show_estimate = getattr(args, 'estimate', False)
+
     try:
         prd = load_prd(prd_path)
     except PRDNotFoundError as e:
@@ -601,7 +681,17 @@ def cmd_status(args: argparse.Namespace) -> int:
                 title = story.get('title', 'Untitled')
                 priority = story.get('priority', 'N/A')
                 badge = get_story_badge(story)
-                console.print(f"  {badge} [{story_id}] P{priority}: {title}")
+
+                # Add token estimate if requested
+                if show_estimate:
+                    tokens = estimate_story_tokens(story)
+                    rich_indicator, _ = get_token_indicator(tokens)
+                    token_info = f" (~{tokens} tokens)"
+                    if rich_indicator:
+                        token_info = f" (~{tokens} tokens) {rich_indicator}"
+                    console.print(f"  {badge} [{story_id}] P{priority}: {title}{token_info}")
+                else:
+                    console.print(f"  {badge} [{story_id}] P{priority}: {title}")
         else:
             raise ImportError("Using plain text mode")
     except Exception:
@@ -611,7 +701,17 @@ def cmd_status(args: argparse.Namespace) -> int:
             title = story.get('title', 'Untitled')
             priority = story.get('priority', 'N/A')
             badge = get_story_badge_plain(story)
-            info(f"  {badge} [{story_id}] P{priority}: {title}")
+
+            # Add token estimate if requested
+            if show_estimate:
+                tokens = estimate_story_tokens(story)
+                _, plain_indicator = get_token_indicator(tokens)
+                token_info = f" (~{tokens} tokens)"
+                if plain_indicator:
+                    token_info = f" (~{tokens} tokens) {plain_indicator}"
+                info(f"  {badge} [{story_id}] P{priority}: {title}{token_info}")
+            else:
+                info(f"  {badge} [{story_id}] P{priority}: {title}")
 
     # Print summary
     info("")
@@ -748,6 +848,11 @@ def main() -> int:
 
     # Status command
     status_parser = subparsers.add_parser('status', help='Show PRD status')
+    status_parser.add_argument(
+        '--estimate',
+        action='store_true',
+        help='Show token estimates per story'
+    )
     status_parser.set_defaults(func=cmd_status)
 
     # Run command
