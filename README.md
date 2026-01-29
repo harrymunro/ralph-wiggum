@@ -88,6 +88,8 @@ Ralph works best when you have:
 
 ## Getting Started
 
+**New to Ralph?** Check out the [Quick Start Guide](docs/quick-start.md) to get running in under 5 minutes.
+
 ### Prerequisites
 
 - [Claude Code](https://docs.anthropic.com/en/docs/claude-code) installed and authenticated (`npm install -g @anthropic-ai/claude-code`)
