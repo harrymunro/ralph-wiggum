@@ -13,8 +13,6 @@
 
 Based on [Geoffrey Huntley's Ralph pattern](https://ghuntley.com/ralph/).
 
-> **Fork:** This project is a fork of [snarktank/ralph](https://github.com/snarktank/ralph).
-
 </div>
 
 ---
@@ -93,69 +91,115 @@ V-Ralph implements a three-layer validation model:
 
 ### Installation
 
-**Step 1: Copy V-Ralph to your project**
-
 ```bash
-# From your project root
-mkdir -p scripts/ralph
-cp -r /path/to/ralph-wiggum/scripts/ralph/* scripts/ralph/
+# Clone the repository
+git clone https://github.com/your-org/ralph-wiggum
+cd ralph-wiggum/scripts/ralph
 ```
 
-**Step 2: Install the planning skill (optional)**
+**Optional: Install the planning skill**
 
 ```bash
 # Install globally
-cp -r /path/to/ralph-wiggum/.claude/skills/v-ralph-planning ~/.claude/skills/
+cp -r .claude/skills/v-ralph-planning ~/.claude/skills/
 
 # Or install locally to project
 mkdir -p .claude/skills
-cp -r /path/to/ralph-wiggum/.claude/skills/v-ralph-planning .claude/skills/
+cp -r .claude/skills/v-ralph-planning .claude/skills/
 ```
 
 ---
 
-## Workflow
+## Usage
 
-### 1. Create a PRD
-
-Use the V-Ralph planning skill to generate a machine-verifiable specification:
-
-```
-/v-ralph-planning
-```
-
-Answer the clarifying questions. The skill produces a `prd.json` with verifiable acceptance criteria.
-
-### 2. Run V-Ralph
-
-```bash
-cd scripts/ralph
-
-# Check status of all stories
-python v_ralph.py status
-
-# Execute pending stories
-python v_ralph.py run
-
-# Execute a specific story
-python v_ralph.py run --story US-001
-
-# Preview what would run
-python v_ralph.py run --dry-run
-```
-
----
-
-## Commands
+### Commands
 
 | Command | Description |
 |---------|-------------|
+| `python v_ralph.py --help` | Show help and available commands |
+| `python v_ralph.py --version` | Show version |
 | `python v_ralph.py status` | Show status of all stories |
 | `python v_ralph.py run` | Execute all pending stories |
 | `python v_ralph.py run --story US-001` | Execute a specific story |
 | `python v_ralph.py run --dry-run` | Preview without executing |
 | `python v_ralph.py run --max-retries 3` | Set retry limit per story |
-| `python v_ralph.py --help` | Show all available options |
+
+### Run Command Flags
+
+| Flag | Description |
+|------|-------------|
+| `--prd PATH` | Path to prd.json or prd.yml file (default: prd.json in current directory) |
+| `--progress PATH` | Path to progress.txt file (default: progress.txt in current directory) |
+| `--max-retries N` | Maximum retry attempts per story (default: 5) |
+| `--story US-XXX` | Run only the specified story ID |
+| `--dry-run` | Show what would run without executing |
+
+### Exit Codes
+
+| Code | Meaning |
+|------|---------|
+| 0 | All requested stories completed successfully (or nothing to run) |
+| 1 | Error (file not found, invalid story ID, etc.) |
+| 2 | Story escalated (requires human input) |
+
+### Behavior
+
+- On **success**: Commits changes, updates prd.json to mark story as passed, appends entry to progress.txt
+- On **escalation**: Stops execution immediately, displays reason, exits with code 2
+- On **circuit breaker** (max retries exceeded): Logs failure, moves to next pending story
+
+### Status Command
+
+```bash
+# Show status of all stories (reads prd.json from current directory)
+python v_ralph.py status
+
+# Specify a custom PRD file path
+python v_ralph.py status --prd /path/to/prd.json
+```
+
+**Example output:**
+```
+Project: V-Ralph
+Branch: ralph/v-ralph
+
+ID      Title                                      Status     Attempts
+----------------------------------------------------------------------
+US-001  Project scaffolding and CLI entry point    pass       0
+US-002  prd.yml read/write module                  pass       0
+US-003  Claude CLI wrapper                         fail       2
+
+Progress: 2/3 stories complete
+```
+
+---
+
+## Three-Layer Validation
+
+V-Ralph implements rigorous validation to catch "green build hallucinations":
+
+### Layer 1: Coder Implementation
+The coding agent implements the user story according to the acceptance criteria. It writes code, updates documentation, and follows project patterns.
+
+### Layer 2: Automated Validation
+After implementation, automated checks run:
+- Type checking (e.g., `python -m py_compile`)
+- Linting (e.g., `npm run lint`)
+- Test suite (e.g., `pytest`)
+
+A green build is necessary but not sufficient - it proves the code runs, not that it's correct.
+
+### Layer 3: Semantic Audit
+A separate, stateless Claude instance reviews the implementation as an adversarial QA engineer. The auditor:
+- Only sees the spec and the diff (no context from the coding session)
+- Checks if the implementation satisfies the **spirit** of the spec, not just the letter
+- Looks for edge cases, unstated assumptions, and quality red flags
+- Returns one of three verdicts:
+  - **PASS** - Implementation is correct, proceed to commit
+  - **RETRY** - Found fixable issues, loop back to coder with feedback
+  - **ESCALATE** - Spec ambiguity requires human input, stop the loop
+
+This three-layer approach catches "green build hallucinations" where code compiles and tests pass but doesn't actually solve the problem.
 
 ---
 
@@ -170,17 +214,100 @@ python v_ralph.py run --dry-run
 | `prd.json` | User stories with `passes` status |
 | `progress.txt` | Append-only learnings for future iterations |
 
+### Project Structure
+
+```
+scripts/ralph/
+├── v_ralph.py        # Main CLI entry point
+├── macro_v/          # Macro-V lifecycle components
+├── micro_v/          # Micro-V lifecycle components (executor, auditor)
+├── shared/           # Common utilities (prd, claude, progress, git)
+├── tests/            # Unit and integration tests
+├── prd.json          # Project requirements document
+└── progress.txt      # Progress tracking log
+```
+
+---
+
+## Prompt Customization
+
+V-Ralph uses template-based prompts that can be customized for different project needs.
+
+### Prompt Templates
+
+Prompt templates are located in `micro_v/prompts/`:
+
+- **`coder.md`** - Instructions for the coding agent that implements user stories
+- **`auditor.md`** - Instructions for the semantic auditor that reviews implementations
+
+### Template Placeholders
+
+The coder prompt supports the following placeholders that are automatically filled at runtime:
+
+| Placeholder | Description |
+|-------------|-------------|
+| `{{goal}}` | The user story title and description |
+| `{{files}}` | Whitelist of files the agent may edit |
+| `{{criteria}}` | The acceptance criteria to satisfy |
+| `{{learnings}}` | Relevant patterns and learnings from progress.txt |
+
+### Customizing Prompts
+
+To customize the coder behavior:
+
+1. Edit `micro_v/prompts/coder.md`
+2. Keep all four placeholders (`{{goal}}`, `{{files}}`, `{{criteria}}`, `{{learnings}}`)
+3. Modify the rules and guidelines sections as needed
+
+**Important**: Do not remove the forbidden shortcuts section - it prevents agents from using quality-bypassing hacks.
+
+---
+
+## Planning with V-Ralph
+
+V-Ralph includes a Claude Code skill for interactive spec refinement that produces machine-verifiable specifications.
+
+### Invoking the Planning Skill
+
+In Claude Code, use the `/v-ralph-planning` command:
+
+```
+/v-ralph-planning
+```
+
+Or trigger it naturally:
+- "v-ralph planning for my new feature"
+- "create v-ralph spec"
+- "plan for ralph"
+- "verifiable spec"
+
+### What the Planning Skill Does
+
+1. **Gathers requirements** through clarifying questions with lettered options for quick responses
+2. **Enforces verifiability** - every acceptance criterion must have a corresponding verification command
+3. **Requires mandatory elements**:
+   - Files whitelist for every story (prevents scope creep)
+   - README update criterion (keeps docs in sync)
+   - Typecheck/test pass criteria (quality gates)
+4. **Outputs valid prd.json** ready for `v_ralph.py run`
+
+### Verifiable Criteria Examples
+
+The skill enforces machine-verifiable criteria:
+
+| Bad (Vague) | Good (Verifiable) |
+|-------------|-------------------|
+| "Works correctly" | "Returns 200 status for valid input" |
+| "Good error handling" | "Raises ValueError with message 'Invalid ID'" |
+| "Proper testing" | "tests/test_feature.py exists and passes" |
+
+### Skill Location
+
+The planning skill is at `.claude/skills/v-ralph-planning/SKILL.md` and can be customized for project-specific needs.
+
 ---
 
 ## Critical Concepts
-
-### Three-Layer Validation
-
-V-Ralph implements rigorous validation to catch "green build hallucinations":
-
-1. **Coder** - Implements the story according to acceptance criteria
-2. **Validation** - Runs typecheck, lint, and tests (necessary but not sufficient)
-3. **Auditor** - Separate Claude instance reviews if implementation satisfies the *spirit* of the spec
 
 ### Each Iteration = Fresh Context
 
@@ -203,16 +330,6 @@ Each PRD item should be small enough to complete in one context window. If a tas
 - "Build the entire dashboard"
 - "Add authentication"
 - "Refactor the API"
-
-### Verifiable Acceptance Criteria
-
-The planning skill enforces machine-verifiable criteria:
-
-| Bad (Vague) | Good (Verifiable) |
-|-------------|-------------------|
-| "Works correctly" | "Returns 200 status for valid input" |
-| "Good error handling" | "Raises ValueError with message 'Invalid ID'" |
-| "Proper testing" | "tests/test_feature.py exists and passes" |
 
 ### Feedback Loops
 
@@ -250,25 +367,57 @@ cd scripts/ralph
 # Run all tests
 python -m pytest tests/ -v
 
-# Run only unit tests
+# Run only unit tests (faster)
 python -m pytest tests/ -v --ignore=tests/test_integration.py
 
-# Run integration tests
+# Run only integration tests
 python -m pytest tests/test_integration.py -v
+```
+
+### Integration Tests
+
+The integration tests in `tests/test_integration.py` verify the complete V-model flow with mocked Claude calls. These tests are designed for CI environments with deterministic behavior.
+
+**What they test:**
+1. Story execution with mocked Claude coder
+2. Validation pass/retry flow
+3. Semantic audit pass/retry/escalate verdicts
+4. PRD update (marking stories as passed)
+5. Progress file updates
+
+**Test fixtures:**
+
+The `tests/fixtures/` directory contains a minimal project for testing:
+- `prd.json` - Simple PRD with one test story
+- `progress.txt` - Progress file with patterns
+- `sample.py` - Placeholder Python file
+- `test_sample.py` - Placeholder test file
+
+**Running in CI:**
+
+The integration tests use mocked responses and don't require actual Claude CLI access:
+
+```bash
+python -m pytest tests/test_integration.py -v --tb=short
+```
+
+All mocks produce deterministic results, making tests reproducible across environments.
+
+### Type Checking
+
+```bash
+python -m py_compile v_ralph.py
 ```
 
 ---
 
 ## Acknowledgments
 
-This project is a fork of [snarktank/ralph](https://github.com/snarktank/ralph), originally created by the snarktank team. We are grateful for their foundational work on the Ralph agent pattern.
-
-The original project is licensed under the MIT License, and this derivative work maintains that license with the original copyright notice preserved.
+Originally forked from [snarktank/ralph](https://github.com/snarktank/ralph). We are grateful for their foundational work on the Ralph agent pattern.
 
 ---
 
 ## References
 
-- [Original Ralph repository (snarktank/ralph)](https://github.com/snarktank/ralph)
 - [Geoffrey Huntley's Ralph article](https://ghuntley.com/ralph/)
 - [Claude Code documentation](https://docs.anthropic.com/en/docs/claude-code)
