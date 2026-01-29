@@ -1,6 +1,7 @@
 """Tests for v_ralph CLI argument parsing and commands."""
 
 import argparse
+import json
 import sys
 import pytest
 from unittest.mock import patch, MagicMock
@@ -294,6 +295,293 @@ class TestDebugLogging:
         with patch('v_ralph.debug') as mock_debug:
             debug_environment(False)
             mock_debug.assert_not_called()
+
+
+class TestStatusCommand:
+    """Tests for the status command."""
+
+    def test_status_with_valid_prd(self, tmp_path):
+        """Test status command with a valid PRD file."""
+        sys.path.insert(0, str(__file__).rsplit('/tests/', 1)[0])
+        from v_ralph import cmd_status
+        import argparse
+
+        # Create a valid PRD file
+        prd_file = tmp_path / "prd.json"
+        prd_file.write_text(json.dumps({
+            "project": "Test Project",
+            "branchName": "test/branch",
+            "userStories": [
+                {"id": "US-001", "title": "Story 1", "priority": 1, "passes": True},
+                {"id": "US-002", "title": "Story 2", "priority": 2, "passes": False}
+            ]
+        }))
+
+        args = argparse.Namespace(prd=str(prd_file))
+        exit_code = cmd_status(args)
+        assert exit_code == 0
+
+    def test_status_with_missing_prd(self, tmp_path):
+        """Test status command with a missing PRD file returns exit code 1."""
+        sys.path.insert(0, str(__file__).rsplit('/tests/', 1)[0])
+        from v_ralph import cmd_status
+        import argparse
+
+        # Point to non-existent file
+        args = argparse.Namespace(prd=str(tmp_path / "nonexistent.json"))
+        exit_code = cmd_status(args)
+        assert exit_code == 1
+
+    def test_status_with_empty_stories_list(self, tmp_path):
+        """Test status command with empty stories list returns exit code 0."""
+        sys.path.insert(0, str(__file__).rsplit('/tests/', 1)[0])
+        from v_ralph import cmd_status
+        import argparse
+
+        # Create PRD with empty stories
+        prd_file = tmp_path / "prd.json"
+        prd_file.write_text(json.dumps({
+            "project": "Test Project",
+            "branchName": "test/branch",
+            "userStories": []
+        }))
+
+        args = argparse.Namespace(prd=str(prd_file))
+        exit_code = cmd_status(args)
+        assert exit_code == 0
+
+
+class TestRunCommandArgumentParsing:
+    """Tests for the run command argument parsing."""
+
+    def test_prd_flag_parsing(self):
+        """Test that --prd flag is recognized and has default value."""
+        sys.path.insert(0, str(__file__).rsplit('/tests/', 1)[0])
+        from v_ralph import main
+
+        with patch('sys.argv', ['v_ralph', 'run', '--dry-run']):
+            with patch('v_ralph.cmd_run') as mock_run:
+                mock_run.return_value = 0
+                main()
+                args = mock_run.call_args[0][0]
+                assert args.prd == 'prd.json'  # default value
+
+    def test_prd_flag_custom_value(self):
+        """Test that --prd flag accepts custom value."""
+        sys.path.insert(0, str(__file__).rsplit('/tests/', 1)[0])
+        from v_ralph import main
+
+        with patch('sys.argv', ['v_ralph', '--prd', 'custom.json', 'run', '--dry-run']):
+            with patch('v_ralph.cmd_run') as mock_run:
+                mock_run.return_value = 0
+                main()
+                args = mock_run.call_args[0][0]
+                assert args.prd == 'custom.json'
+
+    def test_story_flag_parsing(self):
+        """Test that --story flag is recognized."""
+        sys.path.insert(0, str(__file__).rsplit('/tests/', 1)[0])
+        from v_ralph import main
+
+        with patch('sys.argv', ['v_ralph', 'run', '--story', 'US-001', '--dry-run']):
+            with patch('v_ralph.cmd_run') as mock_run:
+                mock_run.return_value = 0
+                main()
+                args = mock_run.call_args[0][0]
+                assert args.story == 'US-001'
+
+    def test_story_flag_default_is_none(self):
+        """Test that --story flag defaults to None."""
+        sys.path.insert(0, str(__file__).rsplit('/tests/', 1)[0])
+        from v_ralph import main
+
+        with patch('sys.argv', ['v_ralph', 'run', '--dry-run']):
+            with patch('v_ralph.cmd_run') as mock_run:
+                mock_run.return_value = 0
+                main()
+                args = mock_run.call_args[0][0]
+                assert args.story is None
+
+    def test_dry_run_flag_parsing(self):
+        """Test that --dry-run flag is recognized."""
+        sys.path.insert(0, str(__file__).rsplit('/tests/', 1)[0])
+        from v_ralph import main
+
+        with patch('sys.argv', ['v_ralph', 'run', '--dry-run']):
+            with patch('v_ralph.cmd_run') as mock_run:
+                mock_run.return_value = 0
+                main()
+                args = mock_run.call_args[0][0]
+                assert args.dry_run is True
+
+    def test_dry_run_flag_default_is_false(self):
+        """Test that --dry-run flag defaults to False."""
+        sys.path.insert(0, str(__file__).rsplit('/tests/', 1)[0])
+        from v_ralph import main
+
+        with patch('sys.argv', ['v_ralph', 'run']):
+            with patch('v_ralph.cmd_run') as mock_run:
+                mock_run.return_value = 0
+                main()
+                args = mock_run.call_args[0][0]
+                assert args.dry_run is False
+
+    def test_max_retries_flag_parsing(self):
+        """Test that --max-retries flag is recognized with custom value."""
+        sys.path.insert(0, str(__file__).rsplit('/tests/', 1)[0])
+        from v_ralph import main
+
+        with patch('sys.argv', ['v_ralph', 'run', '--max-retries', '5', '--dry-run']):
+            with patch('v_ralph.cmd_run') as mock_run:
+                mock_run.return_value = 0
+                main()
+                args = mock_run.call_args[0][0]
+                assert args.max_retries == 5
+
+    def test_max_retries_flag_default_is_3(self):
+        """Test that --max-retries flag defaults to 3."""
+        sys.path.insert(0, str(__file__).rsplit('/tests/', 1)[0])
+        from v_ralph import main
+
+        with patch('sys.argv', ['v_ralph', 'run', '--dry-run']):
+            with patch('v_ralph.cmd_run') as mock_run:
+                mock_run.return_value = 0
+                main()
+                args = mock_run.call_args[0][0]
+                assert args.max_retries == 3
+
+
+class TestExitCodes:
+    """Tests for CLI exit codes."""
+
+    def test_status_success_returns_0(self, tmp_path):
+        """Test that successful status command returns exit code 0."""
+        sys.path.insert(0, str(__file__).rsplit('/tests/', 1)[0])
+        from v_ralph import cmd_status
+        import argparse
+
+        # Create a valid PRD file
+        prd_file = tmp_path / "prd.json"
+        prd_file.write_text(json.dumps({
+            "project": "Test Project",
+            "userStories": [{"id": "US-001", "title": "Story 1", "passes": True}]
+        }))
+
+        args = argparse.Namespace(prd=str(prd_file))
+        exit_code = cmd_status(args)
+        assert exit_code == 0
+
+    def test_status_error_returns_1(self, tmp_path):
+        """Test that status command with missing PRD returns exit code 1."""
+        sys.path.insert(0, str(__file__).rsplit('/tests/', 1)[0])
+        from v_ralph import cmd_status
+        import argparse
+
+        args = argparse.Namespace(prd=str(tmp_path / "missing.json"))
+        exit_code = cmd_status(args)
+        assert exit_code == 1
+
+    def test_run_dry_run_success_returns_0(self, tmp_path):
+        """Test that successful run --dry-run returns exit code 0."""
+        sys.path.insert(0, str(__file__).rsplit('/tests/', 1)[0])
+        from v_ralph import cmd_run
+        import argparse
+
+        # Create a valid PRD file
+        prd_file = tmp_path / "prd.json"
+        prd_file.write_text(json.dumps({
+            "project": "Test Project",
+            "userStories": [{"id": "US-001", "title": "Story 1", "passes": False}]
+        }))
+
+        args = argparse.Namespace(
+            prd=str(prd_file),
+            dry_run=True,
+            story=None,
+            max_retries=3,
+            verbose=False,
+            debug=False
+        )
+        exit_code = cmd_run(args)
+        assert exit_code == 0
+
+    def test_run_missing_prd_returns_1(self, tmp_path):
+        """Test that run command with missing PRD returns exit code 1."""
+        sys.path.insert(0, str(__file__).rsplit('/tests/', 1)[0])
+        from v_ralph import cmd_run
+        import argparse
+
+        args = argparse.Namespace(
+            prd=str(tmp_path / "missing.json"),
+            dry_run=False,
+            story=None,
+            max_retries=3,
+            verbose=False,
+            debug=False
+        )
+        exit_code = cmd_run(args)
+        assert exit_code == 1
+
+    def test_run_invalid_story_returns_1(self, tmp_path):
+        """Test that run command with invalid story ID returns exit code 1."""
+        sys.path.insert(0, str(__file__).rsplit('/tests/', 1)[0])
+        from v_ralph import cmd_run
+        import argparse
+
+        # Create a valid PRD file
+        prd_file = tmp_path / "prd.json"
+        prd_file.write_text(json.dumps({
+            "project": "Test Project",
+            "userStories": [{"id": "US-001", "title": "Story 1", "passes": False}]
+        }))
+
+        args = argparse.Namespace(
+            prd=str(prd_file),
+            dry_run=False,
+            story="INVALID-ID",
+            max_retries=3,
+            verbose=False,
+            debug=False
+        )
+        exit_code = cmd_run(args)
+        assert exit_code == 1
+
+    def test_run_all_complete_returns_0(self, tmp_path):
+        """Test that run command when all stories complete returns exit code 0."""
+        sys.path.insert(0, str(__file__).rsplit('/tests/', 1)[0])
+        from v_ralph import cmd_run
+        import argparse
+
+        # Create PRD with all stories passing
+        prd_file = tmp_path / "prd.json"
+        prd_file.write_text(json.dumps({
+            "project": "Test Project",
+            "userStories": [
+                {"id": "US-001", "title": "Story 1", "passes": True},
+                {"id": "US-002", "title": "Story 2", "passes": True}
+            ]
+        }))
+
+        args = argparse.Namespace(
+            prd=str(prd_file),
+            dry_run=False,
+            story=None,
+            max_retries=3,
+            verbose=False,
+            debug=False
+        )
+        exit_code = cmd_run(args)
+        assert exit_code == 0
+
+    def test_help_returns_0(self):
+        """Test that --help returns exit code 0."""
+        sys.path.insert(0, str(__file__).rsplit('/tests/', 1)[0])
+        from v_ralph import main
+
+        with patch('sys.argv', ['v_ralph', '--help']):
+            with pytest.raises(SystemExit) as exc_info:
+                main()
+            assert exc_info.value.code == 0
 
 
 class TestExecutionSummary:
