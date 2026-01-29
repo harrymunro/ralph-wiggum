@@ -333,3 +333,78 @@ class TestProgressBar:
                     call_args = mock_console.print.call_args[0][0]
                     assert "Progress:" in call_args
                     assert "50%" in call_args
+
+
+class TestSummaryBox:
+    """Test suite for summary_box function."""
+
+    def test_summary_box_can_be_imported(self) -> None:
+        """Test that summary_box can be imported from the console module."""
+        from shared.console import summary_box
+        assert summary_box is not None
+
+    def test_summary_box_without_rich_shows_title(self) -> None:
+        """Test that summary_box shows title in plain-text mode."""
+        from shared.console import summary_box
+        with patch.object(console, 'RICH_AVAILABLE', False):
+            captured_output = StringIO()
+            with patch('sys.stdout', captured_output):
+                summary_box("Test Title", ["Line 1", "Line 2"])
+            output = captured_output.getvalue()
+            assert "Test Title" in output
+
+    def test_summary_box_without_rich_shows_lines(self) -> None:
+        """Test that summary_box shows content lines in plain-text mode."""
+        from shared.console import summary_box
+        with patch.object(console, 'RICH_AVAILABLE', False):
+            captured_output = StringIO()
+            with patch('sys.stdout', captured_output):
+                summary_box("Title", ["Line 1", "Line 2", "Line 3"])
+            output = captured_output.getvalue()
+            assert "Line 1" in output
+            assert "Line 2" in output
+            assert "Line 3" in output
+
+    def test_summary_box_without_rich_has_borders(self) -> None:
+        """Test that summary_box has ASCII borders in plain-text mode."""
+        from shared.console import summary_box
+        with patch.object(console, 'RICH_AVAILABLE', False):
+            captured_output = StringIO()
+            with patch('sys.stdout', captured_output):
+                summary_box("Title", ["Content"])
+            output = captured_output.getvalue()
+            assert "+" in output  # Corner characters
+            assert "-" in output  # Horizontal borders
+            assert "|" in output  # Vertical borders
+
+    def test_summary_box_with_empty_lines(self) -> None:
+        """Test that summary_box handles empty lines list."""
+        from shared.console import summary_box
+        with patch.object(console, 'RICH_AVAILABLE', False):
+            captured_output = StringIO()
+            with patch('sys.stdout', captured_output):
+                summary_box("Title", [])
+            output = captured_output.getvalue()
+            assert "Title" in output
+
+    def test_summary_box_with_rich_uses_panel(self) -> None:
+        """Test that summary_box uses Panel when rich is available."""
+        if console.RICH_AVAILABLE:
+            from shared.console import summary_box
+            mock_console = MagicMock()
+            with patch.object(console, '_console', mock_console):
+                with patch.object(console, '_get_console', return_value=mock_console):
+                    summary_box("Test", ["Line 1"])
+                    mock_console.print.assert_called_once()
+
+    def test_summary_box_accepts_style_parameter(self) -> None:
+        """Test that summary_box accepts different style parameters."""
+        from shared.console import summary_box
+        with patch.object(console, 'RICH_AVAILABLE', False):
+            captured_output = StringIO()
+            with patch('sys.stdout', captured_output):
+                # Should not raise for any of these styles
+                summary_box("Title", ["Line"], style="blue")
+                summary_box("Title", ["Line"], style="green")
+                summary_box("Title", ["Line"], style="red")
+                summary_box("Title", ["Line"], style="yellow")

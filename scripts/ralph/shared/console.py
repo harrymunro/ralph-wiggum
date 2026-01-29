@@ -228,3 +228,34 @@ def progress_bar(completed: int, total: int, width: int = 30) -> None:
         empty_char = "-"
         bar = filled_char * filled + empty_char * empty
         print(f"Progress: [{bar}] {bar_text}")
+
+
+def summary_box(title: str, lines: list[str], style: str = "blue") -> None:
+    """Print a summary box with a title and content lines.
+
+    Args:
+        title: The title for the summary box
+        lines: List of content lines to display inside the box
+        style: Color style for the box (default: blue). Options: blue, green, red, yellow
+    """
+    if RICH_AVAILABLE:
+        console = _get_console()
+        if console:
+            # Join lines with newlines for the panel content
+            content = "\n".join(lines)
+            panel = Panel(content, title=title, border_style=style, padding=(0, 1))
+            console.print(panel)
+    else:
+        # Plain-text fallback with ASCII box
+        max_width = max(len(title) + 4, max((len(line) for line in lines), default=0) + 4)
+        border = "+" + "-" * (max_width - 2) + "+"
+
+        print(border)
+        # Center the title
+        title_line = f"| {title.center(max_width - 4)} |"
+        print(title_line)
+        print(border)
+        for line in lines:
+            padded_line = f"| {line.ljust(max_width - 4)} |"
+            print(padded_line)
+        print(border)

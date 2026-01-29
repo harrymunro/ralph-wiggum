@@ -294,3 +294,181 @@ class TestDebugLogging:
         with patch('v_ralph.debug') as mock_debug:
             debug_environment(False)
             mock_debug.assert_not_called()
+
+
+class TestExecutionSummary:
+    """Tests for the ExecutionSummary dataclass."""
+
+    def test_execution_summary_default_values(self):
+        """Test that ExecutionSummary has correct default values."""
+        sys.path.insert(0, str(__file__).rsplit('/tests/', 1)[0])
+        from v_ralph import ExecutionSummary
+
+        summary = ExecutionSummary()
+        assert summary.stories_attempted == 0
+        assert summary.stories_passed == 0
+        assert summary.stories_failed == 0
+        assert summary.total_iterations == 0
+        assert summary.files_changed == 0
+        assert summary.commits == []
+        assert summary.escalated_stories == []
+        assert summary.end_time is None
+
+    def test_execution_summary_elapsed_time_before_finish(self):
+        """Test that elapsed_time works before finish() is called."""
+        sys.path.insert(0, str(__file__).rsplit('/tests/', 1)[0])
+        from v_ralph import ExecutionSummary
+        import time
+
+        summary = ExecutionSummary()
+        time.sleep(0.1)
+        elapsed = summary.elapsed_time
+        assert elapsed >= 0.1
+
+    def test_execution_summary_finish_sets_end_time(self):
+        """Test that finish() sets the end_time."""
+        sys.path.insert(0, str(__file__).rsplit('/tests/', 1)[0])
+        from v_ralph import ExecutionSummary
+
+        summary = ExecutionSummary()
+        assert summary.end_time is None
+        summary.finish()
+        assert summary.end_time is not None
+
+    def test_execution_summary_elapsed_time_formatted_seconds(self):
+        """Test elapsed_time_formatted for short durations (seconds)."""
+        sys.path.insert(0, str(__file__).rsplit('/tests/', 1)[0])
+        from v_ralph import ExecutionSummary
+        import time
+
+        summary = ExecutionSummary()
+        summary.start_time = time.time() - 30  # 30 seconds ago
+        summary.finish()
+        formatted = summary.elapsed_time_formatted
+        assert "s" in formatted
+        assert "m" not in formatted
+
+    def test_execution_summary_elapsed_time_formatted_minutes(self):
+        """Test elapsed_time_formatted for medium durations (minutes)."""
+        sys.path.insert(0, str(__file__).rsplit('/tests/', 1)[0])
+        from v_ralph import ExecutionSummary
+        import time
+
+        summary = ExecutionSummary()
+        summary.start_time = time.time() - 125  # 2 minutes 5 seconds ago
+        summary.finish()
+        formatted = summary.elapsed_time_formatted
+        assert "2m" in formatted
+        assert "5s" in formatted
+
+    def test_execution_summary_elapsed_time_formatted_hours(self):
+        """Test elapsed_time_formatted for long durations (hours)."""
+        sys.path.insert(0, str(__file__).rsplit('/tests/', 1)[0])
+        from v_ralph import ExecutionSummary
+        import time
+
+        summary = ExecutionSummary()
+        summary.start_time = time.time() - 3665  # 1 hour, 1 minute, 5 seconds ago
+        summary.finish()
+        formatted = summary.elapsed_time_formatted
+        assert "1h" in formatted
+        assert "1m" in formatted
+
+    def test_execution_summary_add_escalation(self):
+        """Test that add_escalation adds to escalated_stories list."""
+        sys.path.insert(0, str(__file__).rsplit('/tests/', 1)[0])
+        from v_ralph import ExecutionSummary
+
+        summary = ExecutionSummary()
+        summary.add_escalation("US-001", "Test failure after 3 retries")
+        assert len(summary.escalated_stories) == 1
+        assert summary.escalated_stories[0] == ("US-001", "Test failure after 3 retries")
+
+    def test_execution_summary_multiple_escalations(self):
+        """Test that multiple escalations are tracked."""
+        sys.path.insert(0, str(__file__).rsplit('/tests/', 1)[0])
+        from v_ralph import ExecutionSummary
+
+        summary = ExecutionSummary()
+        summary.add_escalation("US-001", "Reason 1")
+        summary.add_escalation("US-002", "Reason 2")
+        assert len(summary.escalated_stories) == 2
+
+    def test_execution_summary_display_calls_summary_box(self):
+        """Test that display() calls summary_box function."""
+        sys.path.insert(0, str(__file__).rsplit('/tests/', 1)[0])
+        from v_ralph import ExecutionSummary
+
+        summary = ExecutionSummary()
+        summary.stories_attempted = 3
+        summary.stories_passed = 2
+        summary.stories_failed = 1
+        summary.finish()
+
+        with patch('v_ralph.summary_box') as mock_box:
+            summary.display()
+            mock_box.assert_called_once()
+            # Check that title is "Execution Summary"
+            call_args = mock_box.call_args
+            assert call_args[0][0] == "Execution Summary"
+
+    def test_execution_summary_display_red_style_on_failure(self):
+        """Test that display uses red style when there are failures."""
+        sys.path.insert(0, str(__file__).rsplit('/tests/', 1)[0])
+        from v_ralph import ExecutionSummary
+
+        summary = ExecutionSummary()
+        summary.stories_failed = 1
+        summary.finish()
+
+        with patch('v_ralph.summary_box') as mock_box:
+            summary.display()
+            call_kwargs = mock_box.call_args[1]
+            assert call_kwargs.get('style') == 'red'
+
+    def test_execution_summary_display_green_style_on_success(self):
+        """Test that display uses green style when stories pass and no failures."""
+        sys.path.insert(0, str(__file__).rsplit('/tests/', 1)[0])
+        from v_ralph import ExecutionSummary
+
+        summary = ExecutionSummary()
+        summary.stories_passed = 3
+        summary.stories_failed = 0
+        summary.finish()
+
+        with patch('v_ralph.summary_box') as mock_box:
+            summary.display()
+            call_kwargs = mock_box.call_args[1]
+            assert call_kwargs.get('style') == 'green'
+
+    def test_execution_summary_display_red_style_on_escalation(self):
+        """Test that display uses red style when there are escalations."""
+        sys.path.insert(0, str(__file__).rsplit('/tests/', 1)[0])
+        from v_ralph import ExecutionSummary
+
+        summary = ExecutionSummary()
+        summary.stories_passed = 1
+        summary.add_escalation("US-001", "Test reason")
+        summary.finish()
+
+        with patch('v_ralph.summary_box') as mock_box:
+            summary.display()
+            call_kwargs = mock_box.call_args[1]
+            assert call_kwargs.get('style') == 'red'
+
+    def test_execution_summary_display_shows_commits(self):
+        """Test that display shows commit SHAs when commits are made."""
+        sys.path.insert(0, str(__file__).rsplit('/tests/', 1)[0])
+        from v_ralph import ExecutionSummary
+
+        summary = ExecutionSummary()
+        summary.commits = ["abc123", "def456"]
+        summary.finish()
+
+        with patch('v_ralph.summary_box') as mock_box:
+            summary.display()
+            lines = mock_box.call_args[0][1]
+            # Check that commits are in the lines
+            lines_text = "\n".join(lines)
+            assert "abc123" in lines_text
+            assert "def456" in lines_text

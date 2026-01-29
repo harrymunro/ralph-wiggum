@@ -9,11 +9,106 @@ import argparse
 import json
 import os
 import sys
+import time
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Dict
 
-from shared.console import success, error, warning, info, header, progress_bar, debug
+from shared.console import success, error, warning, info, header, progress_bar, debug, summary_box
 from shared.errors import PRDNotFoundError, StoryNotFoundError, RalphError
+
+
+@dataclass
+class ExecutionSummary:
+    """Summary statistics for a Ralph execution run.
+
+    Tracks metrics about the execution including story counts,
+    timing information, and commit details.
+    """
+
+    stories_attempted: int = 0
+    stories_passed: int = 0
+    stories_failed: int = 0
+    total_iterations: int = 0
+    start_time: float = field(default_factory=time.time)
+    end_time: float | None = None
+    files_changed: int = 0
+    commits: list[str] = field(default_factory=list)
+    escalated_stories: list[tuple[str, str]] = field(default_factory=list)  # (story_id, reason)
+
+    @property
+    def elapsed_time(self) -> float:
+        """Calculate elapsed time in seconds."""
+        end = self.end_time if self.end_time else time.time()
+        return end - self.start_time
+
+    @property
+    def elapsed_time_formatted(self) -> str:
+        """Format elapsed time as human-readable string."""
+        elapsed = self.elapsed_time
+        if elapsed < 60:
+            return f"{elapsed:.1f}s"
+        minutes = int(elapsed // 60)
+        seconds = int(elapsed % 60)
+        if minutes < 60:
+            return f"{minutes}m {seconds}s"
+        hours = minutes // 60
+        minutes = minutes % 60
+        return f"{hours}h {minutes}m {seconds}s"
+
+    def finish(self) -> None:
+        """Mark the execution as finished."""
+        self.end_time = time.time()
+
+    def add_escalation(self, story_id: str, reason: str) -> None:
+        """Record an escalated story.
+
+        Args:
+            story_id: The ID of the escalated story
+            reason: The reason for escalation
+        """
+        self.escalated_stories.append((story_id, reason))
+
+    def display(self) -> None:
+        """Display the execution summary using console module."""
+        lines = []
+
+        # Story counts
+        lines.append(f"Stories attempted: {self.stories_attempted}")
+        lines.append(f"Stories passed:    {self.stories_passed}")
+        lines.append(f"Stories failed:    {self.stories_failed}")
+        lines.append("")
+
+        # Timing and iterations
+        lines.append(f"Total iterations:  {self.total_iterations}")
+        lines.append(f"Time elapsed:      {self.elapsed_time_formatted}")
+        lines.append("")
+
+        # Files and commits
+        lines.append(f"Files changed:     {self.files_changed}")
+        if self.commits:
+            lines.append(f"Commits made:      {len(self.commits)}")
+            for sha in self.commits:
+                lines.append(f"  - {sha}")
+        else:
+            lines.append("Commits made:      0")
+
+        # Escalated stories
+        if self.escalated_stories:
+            lines.append("")
+            lines.append("Escalated stories:")
+            for story_id, reason in self.escalated_stories:
+                lines.append(f"  - {story_id}: {reason}")
+
+        # Determine box style based on results
+        if self.stories_failed > 0 or self.escalated_stories:
+            style = "red"
+        elif self.stories_passed > 0:
+            style = "green"
+        else:
+            style = "blue"
+
+        summary_box("Execution Summary", lines, style=style)
 
 
 def truncate_text(text: str, max_length: int = 500) -> str:
@@ -374,11 +469,28 @@ def cmd_run(args: argparse.Namespace) -> int:
         for criterion in target_story.get('acceptanceCriteria', []):
             debug_log(f"  - {criterion}", debug_enabled)
 
+    # Create execution summary to track stats
+    summary = ExecutionSummary()
+    summary.stories_attempted = 1
+
     # Placeholder for execution - in full implementation, these would be used:
     # verbose_prompt(executor_prompt, verbose) - to show truncated prompts
     # debug_prompt(executor_prompt, debug_enabled) - to show full prompts
     # verbose_validation_output(validation_result, verbose) - to show full validation output
     info("(Execution would happen here - this is a placeholder)")
+
+    # In a real execution, these would be updated based on actual results:
+    # summary.stories_passed += 1  # if story passed
+    # summary.stories_failed += 1  # if story failed
+    # summary.total_iterations += iteration_count
+    # summary.files_changed = get_files_changed_count()
+    # summary.commits.append(commit_sha)
+    # summary.add_escalation(story_id, reason)  # if escalated
+
+    # Finish and display the summary
+    summary.finish()
+    info("")
+    summary.display()
 
     return 0
 
