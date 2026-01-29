@@ -102,6 +102,20 @@ def header(message: str) -> None:
         print(f"=== {message} ===")
 
 
+def debug(message: str) -> None:
+    """Print a debug message in dim/gray color.
+
+    Args:
+        message: The debug message to display
+    """
+    if RICH_AVAILABLE:
+        console = _get_console()
+        if console:
+            console.print(f"[dim]{message}[/dim]")
+    else:
+        print(f"[DEBUG] {message}")
+
+
 class Spinner:
     """A context manager for showing a spinner during long-running operations.
 

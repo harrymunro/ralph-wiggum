@@ -169,3 +169,128 @@ class TestVerboseLogging:
         with patch('v_ralph.info') as mock_info:
             verbose_validation_output("test output", False)
             mock_info.assert_not_called()
+
+
+class TestDebugFlag:
+    """Tests for the --debug flag."""
+
+    def test_debug_flag_parsed(self):
+        """Test that --debug flag is recognized by the parser."""
+        sys.path.insert(0, str(__file__).rsplit('/tests/', 1)[0])
+        from v_ralph import main
+
+        with patch('sys.argv', ['v_ralph', 'run', '--debug', '--dry-run']):
+            with patch('v_ralph.cmd_run') as mock_run:
+                mock_run.return_value = 0
+                main()
+                args = mock_run.call_args[0][0]
+                assert args.debug is True
+
+    def test_debug_flag_default_is_false(self):
+        """Test that debug flag defaults to False when not provided."""
+        sys.path.insert(0, str(__file__).rsplit('/tests/', 1)[0])
+        from v_ralph import main
+
+        with patch('sys.argv', ['v_ralph', 'run', '--dry-run']):
+            with patch('v_ralph.cmd_run') as mock_run:
+                mock_run.return_value = 0
+                main()
+                args = mock_run.call_args[0][0]
+                assert args.debug is False
+
+    def test_debug_flag_in_help_output(self):
+        """Test that --debug appears in run --help output."""
+        sys.path.insert(0, str(__file__).rsplit('/tests/', 1)[0])
+        from v_ralph import main
+
+        with patch('sys.argv', ['v_ralph', 'run', '--help']):
+            with pytest.raises(SystemExit) as exc_info:
+                with patch('sys.stdout.write') as mock_write:
+                    main()
+            # Help exits with code 0
+            assert exc_info.value.code == 0
+
+
+class TestDebugLogging:
+    """Tests for debug logging helper functions."""
+
+    def test_debug_log_when_enabled(self):
+        """Test that debug_log outputs when debug_enabled=True."""
+        sys.path.insert(0, str(__file__).rsplit('/tests/', 1)[0])
+        from v_ralph import debug_log
+
+        with patch('v_ralph.debug') as mock_debug:
+            debug_log("test message", True)
+            mock_debug.assert_called_once_with("[DEBUG] test message")
+
+    def test_debug_log_when_disabled(self):
+        """Test that debug_log is silent when debug_enabled=False."""
+        sys.path.insert(0, str(__file__).rsplit('/tests/', 1)[0])
+        from v_ralph import debug_log
+
+        with patch('v_ralph.debug') as mock_debug:
+            debug_log("test message", False)
+            mock_debug.assert_not_called()
+
+    def test_debug_prompt_shows_full_text(self):
+        """Test that debug_prompt shows full prompt without truncation."""
+        sys.path.insert(0, str(__file__).rsplit('/tests/', 1)[0])
+        from v_ralph import debug_prompt
+
+        long_prompt = "line1\nline2\nline3"
+        with patch('v_ralph.debug') as mock_debug:
+            debug_prompt(long_prompt, True)
+            # Should be called 4 times: header + 3 lines
+            assert mock_debug.call_count == 4
+            # Header should include full char count (17 chars for "line1\nline2\nline3")
+            first_call = mock_debug.call_args_list[0][0][0]
+            assert "17 chars" in first_call
+
+    def test_debug_prompt_when_disabled(self):
+        """Test that debug_prompt is silent when debug_enabled=False."""
+        sys.path.insert(0, str(__file__).rsplit('/tests/', 1)[0])
+        from v_ralph import debug_prompt
+
+        with patch('v_ralph.debug') as mock_debug:
+            debug_prompt("test prompt", False)
+            mock_debug.assert_not_called()
+
+    def test_debug_file_path_when_enabled(self):
+        """Test that debug_file_path outputs when debug_enabled=True."""
+        sys.path.insert(0, str(__file__).rsplit('/tests/', 1)[0])
+        from v_ralph import debug_file_path
+
+        with patch('v_ralph.debug') as mock_debug:
+            debug_file_path("/path/to/file", "PRD file", True)
+            mock_debug.assert_called_once_with("[DEBUG] PRD file: /path/to/file")
+
+    def test_debug_file_path_when_disabled(self):
+        """Test that debug_file_path is silent when debug_enabled=False."""
+        sys.path.insert(0, str(__file__).rsplit('/tests/', 1)[0])
+        from v_ralph import debug_file_path
+
+        with patch('v_ralph.debug') as mock_debug:
+            debug_file_path("/path/to/file", "PRD file", False)
+            mock_debug.assert_not_called()
+
+    def test_debug_environment_when_enabled(self):
+        """Test that debug_environment outputs when debug_enabled=True."""
+        sys.path.insert(0, str(__file__).rsplit('/tests/', 1)[0])
+        from v_ralph import debug_environment
+
+        with patch('v_ralph.debug') as mock_debug:
+            debug_environment(True)
+            # Should output header + 3 info lines (python, platform, working dir)
+            assert mock_debug.call_count == 4
+            # Check header
+            first_call = mock_debug.call_args_list[0][0][0]
+            assert "Environment info" in first_call
+
+    def test_debug_environment_when_disabled(self):
+        """Test that debug_environment is silent when debug_enabled=False."""
+        sys.path.insert(0, str(__file__).rsplit('/tests/', 1)[0])
+        from v_ralph import debug_environment
+
+        with patch('v_ralph.debug') as mock_debug:
+            debug_environment(False)
+            mock_debug.assert_not_called()

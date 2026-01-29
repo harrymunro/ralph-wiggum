@@ -123,6 +123,28 @@ class TestConsoleFunctions:
             assert "===" in output
             assert "Test header message" in output
 
+    def test_debug_with_rich(self) -> None:
+        """Test debug() function outputs dim text when rich is available."""
+        if console.RICH_AVAILABLE:
+            mock_console = MagicMock()
+            with patch.object(console, '_console', mock_console):
+                with patch.object(console, '_get_console', return_value=mock_console):
+                    console.debug("Test debug message")
+                    mock_console.print.assert_called_once()
+                    call_args = mock_console.print.call_args[0][0]
+                    assert "[dim]" in call_args
+                    assert "Test debug message" in call_args
+
+    def test_debug_without_rich(self) -> None:
+        """Test debug() function outputs plain text when rich is not available."""
+        with patch.object(console, 'RICH_AVAILABLE', False):
+            captured_output = StringIO()
+            with patch('sys.stdout', captured_output):
+                console.debug("Test debug message")
+            output = captured_output.getvalue()
+            assert "[DEBUG]" in output
+            assert "Test debug message" in output
+
 
 class TestRichAvailability:
     """Test suite for rich library availability detection."""

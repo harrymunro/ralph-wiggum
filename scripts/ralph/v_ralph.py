@@ -12,7 +12,7 @@ import sys
 from pathlib import Path
 from typing import Any, Dict
 
-from shared.console import success, error, warning, info, header, progress_bar
+from shared.console import success, error, warning, info, header, progress_bar, debug
 from shared.errors import PRDNotFoundError, StoryNotFoundError, RalphError
 
 
@@ -66,6 +66,56 @@ def verbose_validation_output(output: str, verbose: bool) -> None:
         info("[VERBOSE] Validation output:")
         for line in output.split('\n'):
             info(f"  {line}")
+
+
+def debug_log(message: str, debug_enabled: bool) -> None:
+    """Log a message only if debug mode is enabled.
+
+    Args:
+        message: Message to log
+        debug_enabled: Whether debug mode is enabled
+    """
+    if debug_enabled:
+        debug(f"[DEBUG] {message}")
+
+
+def debug_prompt(prompt: str, debug_enabled: bool) -> None:
+    """Log a full prompt in debug mode (not truncated).
+
+    Args:
+        prompt: The prompt text to log
+        debug_enabled: Whether debug mode is enabled
+    """
+    if debug_enabled:
+        debug(f"[DEBUG] Full prompt ({len(prompt)} chars):")
+        for line in prompt.split('\n'):
+            debug(f"  {line}")
+
+
+def debug_file_path(path: str, description: str, debug_enabled: bool) -> None:
+    """Log a file path in debug mode.
+
+    Args:
+        path: The file path to log
+        description: Description of what the file is
+        debug_enabled: Whether debug mode is enabled
+    """
+    if debug_enabled:
+        debug(f"[DEBUG] {description}: {path}")
+
+
+def debug_environment(debug_enabled: bool) -> None:
+    """Log environment information in debug mode.
+
+    Args:
+        debug_enabled: Whether debug mode is enabled
+    """
+    if debug_enabled:
+        import platform
+        debug("[DEBUG] Environment info:")
+        debug(f"  Python: {sys.version}")
+        debug(f"  Platform: {platform.platform()}")
+        debug(f"  Working directory: {os.getcwd()}")
 
 
 def display_error(err: RalphError) -> None:
@@ -303,16 +353,30 @@ def cmd_run(args: argparse.Namespace) -> int:
 
     story_id = target_story.get('id', 'N/A')
     story_title = target_story.get('title', 'Untitled')
-    verbose = getattr(args, 'verbose', False)
+    debug_enabled = getattr(args, 'debug', False)
+    # Debug mode includes verbose mode
+    verbose = getattr(args, 'verbose', False) or debug_enabled
 
     header(f"Running story: [{story_id}] {story_title}")
+
+    # Debug mode shows environment info
+    debug_environment(debug_enabled)
+    debug_file_path(prd_path, "PRD file", debug_enabled)
 
     # Verbose mode shows additional details
     verbose_log(f"Story priority: {target_story.get('priority', 'N/A')}", verbose)
     verbose_log(f"Max retries: {args.max_retries}", verbose)
 
+    # Debug mode shows full story details
+    debug_log(f"Story description: {target_story.get('description', 'N/A')}", debug_enabled)
+    if target_story.get('acceptanceCriteria'):
+        debug_log("Acceptance criteria:", debug_enabled)
+        for criterion in target_story.get('acceptanceCriteria', []):
+            debug_log(f"  - {criterion}", debug_enabled)
+
     # Placeholder for execution - in full implementation, these would be used:
     # verbose_prompt(executor_prompt, verbose) - to show truncated prompts
+    # debug_prompt(executor_prompt, debug_enabled) - to show full prompts
     # verbose_validation_output(validation_result, verbose) - to show full validation output
     info("(Execution would happen here - this is a placeholder)")
 
@@ -362,6 +426,11 @@ def main() -> int:
         '-v', '--verbose',
         action='store_true',
         help='Enable verbose output with truncated prompts and full validation output'
+    )
+    run_parser.add_argument(
+        '--debug',
+        action='store_true',
+        help='Enable debug output with full prompts, file paths, and environment info (includes verbose)'
     )
     run_parser.set_defaults(func=cmd_run)
 
