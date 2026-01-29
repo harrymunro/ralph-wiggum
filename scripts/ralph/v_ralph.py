@@ -671,6 +671,274 @@ def get_token_indicator(tokens: int) -> tuple[str, str]:
         return ("", "")
 
 
+# Health check constants
+PATTERNS_TOKEN_WARNING_THRESHOLD = 2000
+HISTORY_ENTRY_WARNING_THRESHOLD = 20
+
+
+@dataclass
+class ProgressFileHealth:
+    """Health status of a progress.txt file.
+
+    Attributes:
+        exists: Whether the file exists
+        has_patterns_section: Whether the Codebase Patterns section exists
+        patterns_count: Number of patterns in the Codebase Patterns section
+        patterns_tokens: Estimated token count for patterns section
+        history_count: Number of history entries (## Date - StoryID sections)
+        history_parseable: Whether all history entries could be parsed
+        parse_errors: List of any parse errors encountered
+        total_tokens: Estimated total token count for the file
+    """
+    exists: bool = False
+    has_patterns_section: bool = False
+    patterns_count: int = 0
+    patterns_tokens: int = 0
+    history_count: int = 0
+    history_parseable: bool = True
+    parse_errors: list[str] = field(default_factory=list)
+    total_tokens: int = 0
+
+
+def estimate_text_tokens(text: str) -> int:
+    """Estimate token count for a text string.
+
+    Uses word count * 1.3 heuristic (same as story estimation).
+
+    Args:
+        text: Text to estimate tokens for
+
+    Returns:
+        Estimated token count
+    """
+    word_count = len(text.split())
+    return int(word_count * 1.3)
+
+
+def parse_progress_file(file_path: str) -> ProgressFileHealth:
+    """Parse a progress.txt file and return health information.
+
+    Args:
+        file_path: Path to the progress.txt file
+
+    Returns:
+        ProgressFileHealth with parsed information
+    """
+    health = ProgressFileHealth()
+
+    # Check if file exists
+    if not os.path.isfile(file_path):
+        return health
+
+    health.exists = True
+
+    try:
+        with open(file_path, 'r') as f:
+            content = f.read()
+    except Exception as e:
+        health.parse_errors.append(f"Could not read file: {e}")
+        health.history_parseable = False
+        return health
+
+    # Estimate total tokens
+    health.total_tokens = estimate_text_tokens(content)
+
+    lines = content.split('\n')
+
+    # Parse Codebase Patterns section
+    in_patterns_section = False
+    patterns_text = []
+    for line in lines:
+        if line.strip() == '## Codebase Patterns':
+            health.has_patterns_section = True
+            in_patterns_section = True
+            continue
+        if in_patterns_section:
+            # Section ends at next ## heading or ---
+            if line.startswith('## ') or line.strip() == '---':
+                in_patterns_section = False
+                continue
+            # Count pattern lines (starting with -)
+            if line.strip().startswith('- '):
+                health.patterns_count += 1
+            if line.strip():
+                patterns_text.append(line)
+
+    # Estimate patterns section tokens
+    if patterns_text:
+        health.patterns_tokens = estimate_text_tokens('\n'.join(patterns_text))
+
+    # Parse history entries (## Date - StoryID format)
+    import re
+    # Match patterns like: ## 2026-01-28 - US-001
+    history_pattern = re.compile(r'^## \d{4}-\d{2}-\d{2} - [A-Z]+-\d+')
+    for line in lines:
+        if history_pattern.match(line.strip()):
+            health.history_count += 1
+
+    return health
+
+
+def display_health_check(check_name: str, passed: bool, message: str) -> None:
+    """Display a health check result with checkmark or X.
+
+    Args:
+        check_name: Name of the check
+        passed: Whether the check passed
+        message: Message describing the result
+    """
+    try:
+        from shared.console import RICH_AVAILABLE, _get_console
+        if RICH_AVAILABLE:
+            console = _get_console()
+            if passed:
+                console.print(f"  [green]✓[/green] {check_name}: {message}")
+            else:
+                console.print(f"  [red]✗[/red] {check_name}: {message}")
+            return
+    except Exception:
+        pass
+
+    # Plain text fallback
+    mark = "[OK]" if passed else "[FAIL]"
+    info(f"  {mark} {check_name}: {message}")
+
+
+def display_health_warning(message: str) -> None:
+    """Display a health warning.
+
+    Args:
+        message: Warning message
+    """
+    try:
+        from shared.console import RICH_AVAILABLE, _get_console
+        if RICH_AVAILABLE:
+            console = _get_console()
+            console.print(f"  [yellow]⚠[/yellow] {message}")
+            return
+    except Exception:
+        pass
+
+    # Plain text fallback
+    warning(f"  [WARN] {message}")
+
+
+def display_health_stat(label: str, value: str | int) -> None:
+    """Display a health statistic.
+
+    Args:
+        label: Statistic label
+        value: Statistic value
+    """
+    info(f"  {label}: {value}")
+
+
+def cmd_health(args: argparse.Namespace) -> int:
+    """Execute the health command to check progress.txt health.
+
+    Checks:
+    - progress.txt exists
+    - Codebase Patterns section present
+    - History entries parseable
+
+    Reports:
+    - Total entry count
+    - Patterns count
+    - Estimated token size
+
+    Warns if:
+    - Patterns section exceeds 2000 tokens
+    - History has more than 20 entries
+
+    Args:
+        args: Parsed command line arguments
+
+    Returns:
+        Exit code (0 for healthy, 1 for issues found)
+    """
+    # Determine progress file path (relative to PRD location)
+    prd_path = args.prd
+    prd_dir = os.path.dirname(os.path.abspath(prd_path)) or '.'
+    progress_path = os.path.join(prd_dir, 'progress.txt')
+
+    header("Progress File Health Check")
+    info("")
+
+    # Parse the progress file
+    health = parse_progress_file(progress_path)
+
+    issues_found = False
+
+    # Check 1: File exists
+    if health.exists:
+        display_health_check("File exists", True, f"Found at {progress_path}")
+    else:
+        display_health_check("File exists", False, f"Not found at {progress_path}")
+        issues_found = True
+        # Cannot continue checks if file doesn't exist
+        info("")
+        error("Cannot perform further checks - file does not exist")
+        return 1
+
+    # Check 2: Patterns section present
+    if health.has_patterns_section:
+        display_health_check("Patterns section present", True, "Codebase Patterns section found")
+    else:
+        display_health_check("Patterns section present", False, "No Codebase Patterns section")
+        issues_found = True
+
+    # Check 3: History entries parseable
+    if health.history_parseable:
+        display_health_check("History parseable", True, f"Found {health.history_count} history entries")
+    else:
+        display_health_check("History parseable", False, "Parse errors encountered")
+        for err in health.parse_errors:
+            info(f"    - {err}")
+        issues_found = True
+
+    # Display statistics
+    info("")
+    header("Statistics:")
+    display_health_stat("Total history entries", health.history_count)
+    display_health_stat("Patterns count", health.patterns_count)
+    display_health_stat("Patterns tokens (estimated)", health.patterns_tokens)
+    display_health_stat("Total tokens (estimated)", health.total_tokens)
+
+    # Check for warnings
+    info("")
+    header("Warnings:")
+    warnings_found = False
+
+    if health.patterns_tokens > PATTERNS_TOKEN_WARNING_THRESHOLD:
+        display_health_warning(
+            f"Patterns section has {health.patterns_tokens} tokens "
+            f"(threshold: {PATTERNS_TOKEN_WARNING_THRESHOLD})"
+        )
+        warnings_found = True
+
+    if health.history_count > HISTORY_ENTRY_WARNING_THRESHOLD:
+        display_health_warning(
+            f"History has {health.history_count} entries "
+            f"(threshold: {HISTORY_ENTRY_WARNING_THRESHOLD})"
+        )
+        warnings_found = True
+
+    if not warnings_found:
+        success("  No warnings")
+
+    # Summary
+    info("")
+    if issues_found:
+        error("Health check found issues")
+        return 1
+    elif warnings_found:
+        warning("Health check passed with warnings")
+        return 0
+    else:
+        success("Health check passed")
+        return 0
+
+
 def cmd_status(args: argparse.Namespace) -> int:
     """Execute the status command to show PRD status.
 
@@ -906,6 +1174,10 @@ def main() -> int:
         help='Show token estimates per story'
     )
     status_parser.set_defaults(func=cmd_status)
+
+    # Health command
+    health_parser = subparsers.add_parser('health', help='Check progress.txt health')
+    health_parser.set_defaults(func=cmd_health)
 
     # Run command
     run_parser = subparsers.add_parser('run', help='Run stories')

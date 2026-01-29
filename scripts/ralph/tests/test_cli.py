@@ -1366,3 +1366,348 @@ class TestDisplayVerboseRetryHistory:
                 display_verbose_retry_history(retry_history, verbose=True)
                 # Should print empty line for spacing
                 mock_info.assert_called_once_with("")
+
+
+class TestProgressFileHealth:
+    """Tests for the ProgressFileHealth dataclass."""
+
+    def test_progress_file_health_default_values(self):
+        """Test that ProgressFileHealth has correct default values."""
+        sys.path.insert(0, str(__file__).rsplit('/tests/', 1)[0])
+        from v_ralph import ProgressFileHealth
+
+        health = ProgressFileHealth()
+        assert health.exists is False
+        assert health.has_patterns_section is False
+        assert health.patterns_count == 0
+        assert health.patterns_tokens == 0
+        assert health.history_count == 0
+        assert health.history_parseable is True
+        assert health.parse_errors == []
+        assert health.total_tokens == 0
+
+    def test_progress_file_health_with_values(self):
+        """Test ProgressFileHealth with custom values."""
+        sys.path.insert(0, str(__file__).rsplit('/tests/', 1)[0])
+        from v_ralph import ProgressFileHealth
+
+        health = ProgressFileHealth(
+            exists=True,
+            has_patterns_section=True,
+            patterns_count=5,
+            patterns_tokens=100,
+            history_count=10,
+            total_tokens=500
+        )
+        assert health.exists is True
+        assert health.patterns_count == 5
+        assert health.history_count == 10
+
+
+class TestEstimateTextTokens:
+    """Tests for the estimate_text_tokens function."""
+
+    def test_estimate_text_tokens_simple(self):
+        """Test token estimation with simple text."""
+        sys.path.insert(0, str(__file__).rsplit('/tests/', 1)[0])
+        from v_ralph import estimate_text_tokens
+
+        text = "one two three four five"
+        tokens = estimate_text_tokens(text)
+        # 5 words * 1.3 = 6.5 -> 6
+        assert tokens == 6
+
+    def test_estimate_text_tokens_empty(self):
+        """Test token estimation with empty text."""
+        sys.path.insert(0, str(__file__).rsplit('/tests/', 1)[0])
+        from v_ralph import estimate_text_tokens
+
+        tokens = estimate_text_tokens("")
+        assert tokens == 0
+
+    def test_estimate_text_tokens_multiline(self):
+        """Test token estimation with multiline text."""
+        sys.path.insert(0, str(__file__).rsplit('/tests/', 1)[0])
+        from v_ralph import estimate_text_tokens
+
+        text = "line one\nline two\nline three"
+        tokens = estimate_text_tokens(text)
+        # 6 words * 1.3 = 7.8 -> 7
+        assert tokens == 7
+
+
+class TestParseProgressFile:
+    """Tests for the parse_progress_file function."""
+
+    def test_parse_progress_file_not_exists(self, tmp_path):
+        """Test parsing a non-existent progress file."""
+        sys.path.insert(0, str(__file__).rsplit('/tests/', 1)[0])
+        from v_ralph import parse_progress_file
+
+        health = parse_progress_file(str(tmp_path / "nonexistent.txt"))
+        assert health.exists is False
+
+    def test_parse_progress_file_exists(self, tmp_path):
+        """Test parsing an existing progress file."""
+        sys.path.insert(0, str(__file__).rsplit('/tests/', 1)[0])
+        from v_ralph import parse_progress_file
+
+        progress_file = tmp_path / "progress.txt"
+        progress_file.write_text("# Progress Log\nSome content")
+
+        health = parse_progress_file(str(progress_file))
+        assert health.exists is True
+
+    def test_parse_progress_file_with_patterns_section(self, tmp_path):
+        """Test parsing a file with Codebase Patterns section."""
+        sys.path.insert(0, str(__file__).rsplit('/tests/', 1)[0])
+        from v_ralph import parse_progress_file
+
+        progress_file = tmp_path / "progress.txt"
+        content = """# Progress Log
+
+## Codebase Patterns
+- Pattern one
+- Pattern two
+- Pattern three
+---
+
+## Recent History
+"""
+        progress_file.write_text(content)
+
+        health = parse_progress_file(str(progress_file))
+        assert health.has_patterns_section is True
+        assert health.patterns_count == 3
+
+    def test_parse_progress_file_without_patterns_section(self, tmp_path):
+        """Test parsing a file without Codebase Patterns section."""
+        sys.path.insert(0, str(__file__).rsplit('/tests/', 1)[0])
+        from v_ralph import parse_progress_file
+
+        progress_file = tmp_path / "progress.txt"
+        content = """# Progress Log
+
+## History
+- Entry 1
+"""
+        progress_file.write_text(content)
+
+        health = parse_progress_file(str(progress_file))
+        assert health.has_patterns_section is False
+        assert health.patterns_count == 0
+
+    def test_parse_progress_file_with_history_entries(self, tmp_path):
+        """Test parsing a file with history entries."""
+        sys.path.insert(0, str(__file__).rsplit('/tests/', 1)[0])
+        from v_ralph import parse_progress_file
+
+        progress_file = tmp_path / "progress.txt"
+        content = """# Progress Log
+
+## Codebase Patterns
+- Pattern one
+---
+
+## 2026-01-28 - US-001
+- What was implemented: Feature 1
+---
+
+## 2026-01-28 - US-002
+- What was implemented: Feature 2
+---
+"""
+        progress_file.write_text(content)
+
+        health = parse_progress_file(str(progress_file))
+        assert health.history_count == 2
+
+    def test_parse_progress_file_estimates_tokens(self, tmp_path):
+        """Test that parse_progress_file estimates total tokens."""
+        sys.path.insert(0, str(__file__).rsplit('/tests/', 1)[0])
+        from v_ralph import parse_progress_file
+
+        progress_file = tmp_path / "progress.txt"
+        content = "one two three four five"  # 5 words
+        progress_file.write_text(content)
+
+        health = parse_progress_file(str(progress_file))
+        assert health.total_tokens == 6  # 5 * 1.3 = 6.5 -> 6
+
+    def test_parse_progress_file_estimates_patterns_tokens(self, tmp_path):
+        """Test that parse_progress_file estimates patterns section tokens."""
+        sys.path.insert(0, str(__file__).rsplit('/tests/', 1)[0])
+        from v_ralph import parse_progress_file
+
+        progress_file = tmp_path / "progress.txt"
+        content = """## Codebase Patterns
+- Pattern one two three
+- Pattern four five
+---
+"""
+        progress_file.write_text(content)
+
+        health = parse_progress_file(str(progress_file))
+        assert health.patterns_tokens > 0
+
+
+class TestHealthCommand:
+    """Tests for the health command."""
+
+    def test_health_command_file_exists(self, tmp_path):
+        """Test health command with existing progress file."""
+        sys.path.insert(0, str(__file__).rsplit('/tests/', 1)[0])
+        from v_ralph import cmd_health
+
+        # Create PRD file
+        prd_file = tmp_path / "prd.json"
+        prd_file.write_text('{}')
+
+        # Create progress file
+        progress_file = tmp_path / "progress.txt"
+        progress_file.write_text("""# Progress Log
+
+## Codebase Patterns
+- Pattern one
+---
+
+## 2026-01-28 - US-001
+- What was implemented
+---
+""")
+
+        args = argparse.Namespace(prd=str(prd_file))
+        exit_code = cmd_health(args)
+        assert exit_code == 0
+
+    def test_health_command_file_not_exists(self, tmp_path):
+        """Test health command with missing progress file."""
+        sys.path.insert(0, str(__file__).rsplit('/tests/', 1)[0])
+        from v_ralph import cmd_health
+
+        # Create PRD file but no progress file
+        prd_file = tmp_path / "prd.json"
+        prd_file.write_text('{}')
+
+        args = argparse.Namespace(prd=str(prd_file))
+        exit_code = cmd_health(args)
+        assert exit_code == 1
+
+    def test_health_command_without_patterns_section(self, tmp_path):
+        """Test health command warns when patterns section missing."""
+        sys.path.insert(0, str(__file__).rsplit('/tests/', 1)[0])
+        from v_ralph import cmd_health
+
+        # Create PRD file
+        prd_file = tmp_path / "prd.json"
+        prd_file.write_text('{}')
+
+        # Create progress file without patterns section
+        progress_file = tmp_path / "progress.txt"
+        progress_file.write_text("""# Progress Log
+
+## 2026-01-28 - US-001
+- What was implemented
+---
+""")
+
+        args = argparse.Namespace(prd=str(prd_file))
+        exit_code = cmd_health(args)
+        assert exit_code == 1  # Issues found (missing patterns section)
+
+    def test_health_command_many_history_entries(self, tmp_path):
+        """Test health command warns with many history entries."""
+        sys.path.insert(0, str(__file__).rsplit('/tests/', 1)[0])
+        from v_ralph import cmd_health, HISTORY_ENTRY_WARNING_THRESHOLD
+
+        # Create PRD file
+        prd_file = tmp_path / "prd.json"
+        prd_file.write_text('{}')
+
+        # Create progress file with many history entries
+        entries = []
+        for i in range(HISTORY_ENTRY_WARNING_THRESHOLD + 5):
+            entries.append(f"## 2026-01-{(i % 28) + 1:02d} - US-{i:03d}\n- Entry\n---\n")
+
+        progress_file = tmp_path / "progress.txt"
+        progress_file.write_text(f"""# Progress Log
+
+## Codebase Patterns
+- Pattern one
+---
+
+{"".join(entries)}
+""")
+
+        args = argparse.Namespace(prd=str(prd_file))
+        exit_code = cmd_health(args)
+        # Should pass (exit 0) but with warnings
+        assert exit_code == 0
+
+    def test_health_command_large_patterns_section(self, tmp_path):
+        """Test health command warns with large patterns section."""
+        sys.path.insert(0, str(__file__).rsplit('/tests/', 1)[0])
+        from v_ralph import cmd_health, PATTERNS_TOKEN_WARNING_THRESHOLD
+
+        # Create PRD file
+        prd_file = tmp_path / "prd.json"
+        prd_file.write_text('{}')
+
+        # Create progress file with large patterns section
+        # Need enough words to exceed 2000 tokens (words * 1.3 > 2000)
+        # So need > 1539 words
+        patterns = [f"- Pattern number {i} with several additional words here" for i in range(300)]
+
+        progress_file = tmp_path / "progress.txt"
+        progress_file.write_text(f"""# Progress Log
+
+## Codebase Patterns
+{chr(10).join(patterns)}
+---
+
+## 2026-01-28 - US-001
+- Entry
+---
+""")
+
+        args = argparse.Namespace(prd=str(prd_file))
+        exit_code = cmd_health(args)
+        # Should pass (exit 0) but with warnings
+        assert exit_code == 0
+
+
+class TestHealthCommandParsing:
+    """Tests for health command argument parsing."""
+
+    def test_health_command_recognized(self):
+        """Test that health command is recognized by the parser."""
+        sys.path.insert(0, str(__file__).rsplit('/tests/', 1)[0])
+        from v_ralph import main
+
+        with patch('sys.argv', ['v_ralph', 'health']):
+            with patch('v_ralph.cmd_health') as mock_health:
+                mock_health.return_value = 0
+                main()
+                mock_health.assert_called_once()
+
+    def test_health_command_in_help(self):
+        """Test that health command appears in help output."""
+        sys.path.insert(0, str(__file__).rsplit('/tests/', 1)[0])
+        from v_ralph import main
+
+        with patch('sys.argv', ['v_ralph', '--help']):
+            with pytest.raises(SystemExit) as exc_info:
+                main()
+            assert exc_info.value.code == 0
+
+    def test_health_command_uses_prd_flag(self):
+        """Test that health command uses --prd flag for progress file location."""
+        sys.path.insert(0, str(__file__).rsplit('/tests/', 1)[0])
+        from v_ralph import main
+
+        with patch('sys.argv', ['v_ralph', '--prd', 'custom/prd.json', 'health']):
+            with patch('v_ralph.cmd_health') as mock_health:
+                mock_health.return_value = 0
+                main()
+                args = mock_health.call_args[0][0]
+                assert args.prd == 'custom/prd.json'
