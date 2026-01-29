@@ -2336,3 +2336,243 @@ class TestRetryControlFlagsCombined:
                     exit_code = cmd_run(args)
                     # Should not fail validation
                     assert exit_code == 0
+
+
+class TestPhaseTimings:
+    """Tests for the PhaseTimings dataclass."""
+
+    def test_phase_timings_default_values(self):
+        """Test that PhaseTimings initializes with zero values."""
+        sys.path.insert(0, str(__file__).rsplit('/tests/', 1)[0])
+        from v_ralph import PhaseTimings
+
+        timings = PhaseTimings()
+        assert timings.coder_time == 0.0
+        assert timings.validation_time == 0.0
+        assert timings.audit_time == 0.0
+
+    def test_phase_timings_total_time(self):
+        """Test that total_phase_time sums all phases."""
+        sys.path.insert(0, str(__file__).rsplit('/tests/', 1)[0])
+        from v_ralph import PhaseTimings
+
+        timings = PhaseTimings(coder_time=10.0, validation_time=5.0, audit_time=3.0)
+        assert timings.total_phase_time == 18.0
+
+    def test_phase_timings_format_time_seconds(self):
+        """Test formatting time in seconds."""
+        sys.path.insert(0, str(__file__).rsplit('/tests/', 1)[0])
+        from v_ralph import PhaseTimings
+
+        timings = PhaseTimings()
+        assert timings.format_time(30.5) == "30.5s"
+        assert timings.format_time(0.0) == "0.0s"
+
+    def test_phase_timings_format_time_minutes(self):
+        """Test formatting time in minutes and seconds."""
+        sys.path.insert(0, str(__file__).rsplit('/tests/', 1)[0])
+        from v_ralph import PhaseTimings
+
+        timings = PhaseTimings()
+        assert timings.format_time(90) == "1m 30s"
+        assert timings.format_time(3599) == "59m 59s"
+
+    def test_phase_timings_format_time_hours(self):
+        """Test formatting time with hours."""
+        sys.path.insert(0, str(__file__).rsplit('/tests/', 1)[0])
+        from v_ralph import PhaseTimings
+
+        timings = PhaseTimings()
+        assert timings.format_time(3600) == "1h 0m 0s"
+        assert timings.format_time(3661) == "1h 1m 1s"
+
+    def test_phase_timings_get_breakdown(self):
+        """Test that get_breakdown returns correct structure."""
+        sys.path.insert(0, str(__file__).rsplit('/tests/', 1)[0])
+        from v_ralph import PhaseTimings
+
+        timings = PhaseTimings(coder_time=10.0, validation_time=5.5, audit_time=2.0)
+        breakdown = timings.get_breakdown()
+
+        assert len(breakdown) == 3
+        assert breakdown[0] == ("Coder invocation", 10.0, "10.0s")
+        assert breakdown[1] == ("Validation", 5.5, "5.5s")
+        assert breakdown[2] == ("Audit", 2.0, "2.0s")
+
+
+class TestExecutionSummaryWithTimings:
+    """Tests for ExecutionSummary with phase timings integration."""
+
+    def test_execution_summary_has_phase_timings(self):
+        """Test that ExecutionSummary includes PhaseTimings."""
+        sys.path.insert(0, str(__file__).rsplit('/tests/', 1)[0])
+        from v_ralph import ExecutionSummary, PhaseTimings
+
+        summary = ExecutionSummary()
+        assert hasattr(summary, 'phase_timings')
+        assert isinstance(summary.phase_timings, PhaseTimings)
+
+    def test_execution_summary_phase_timings_can_be_set(self):
+        """Test that phase timings can be modified."""
+        sys.path.insert(0, str(__file__).rsplit('/tests/', 1)[0])
+        from v_ralph import ExecutionSummary
+
+        summary = ExecutionSummary()
+        summary.phase_timings.coder_time = 15.0
+        summary.phase_timings.validation_time = 8.0
+        summary.phase_timings.audit_time = 3.0
+
+        assert summary.phase_timings.coder_time == 15.0
+        assert summary.phase_timings.total_phase_time == 26.0
+
+    def test_execution_summary_display_includes_phase_breakdown(self):
+        """Test that display includes phase breakdown when timings present."""
+        sys.path.insert(0, str(__file__).rsplit('/tests/', 1)[0])
+        from v_ralph import ExecutionSummary
+
+        summary = ExecutionSummary()
+        summary.phase_timings.coder_time = 10.0
+        summary.phase_timings.validation_time = 5.0
+        summary.phase_timings.audit_time = 2.0
+
+        with patch('v_ralph.summary_box') as mock_box:
+            summary.display()
+            # Check that summary_box was called with lines containing phase breakdown
+            call_args = mock_box.call_args[0]
+            lines = call_args[1]  # Second argument is the lines list
+            assert any("Phase breakdown:" in line for line in lines)
+            assert any("Coder invocation:" in line for line in lines)
+
+
+class TestTimingsFlag:
+    """Tests for the --timings flag."""
+
+    def test_timings_flag_parsed(self):
+        """Test that --timings flag is recognized by the parser."""
+        sys.path.insert(0, str(__file__).rsplit('/tests/', 1)[0])
+        from v_ralph import main
+
+        with patch('sys.argv', ['v_ralph', 'run', '--timings', '--dry-run']):
+            with patch('v_ralph.cmd_run') as mock_run:
+                mock_run.return_value = 0
+                main()
+                args = mock_run.call_args[0][0]
+                assert args.timings is True
+
+    def test_timings_flag_default_is_false(self):
+        """Test that timings flag defaults to False when not provided."""
+        sys.path.insert(0, str(__file__).rsplit('/tests/', 1)[0])
+        from v_ralph import main
+
+        with patch('sys.argv', ['v_ralph', 'run', '--dry-run']):
+            with patch('v_ralph.cmd_run') as mock_run:
+                mock_run.return_value = 0
+                main()
+                args = mock_run.call_args[0][0]
+                assert args.timings is False
+
+    def test_timings_flag_in_help_output(self):
+        """Test that --timings appears in run --help output."""
+        sys.path.insert(0, str(__file__).rsplit('/tests/', 1)[0])
+        from v_ralph import main
+
+        with patch('sys.argv', ['v_ralph', 'run', '--help']):
+            with pytest.raises(SystemExit) as exc_info:
+                with patch('sys.stdout.write') as mock_write:
+                    main()
+            # Help exits with code 0
+            assert exc_info.value.code == 0
+
+
+class TestDisplayPhaseTiming:
+    """Tests for the display_phase_timing function."""
+
+    def test_display_phase_timing_verbose_enabled(self):
+        """Test that display_phase_timing outputs when verbose=True."""
+        sys.path.insert(0, str(__file__).rsplit('/tests/', 1)[0])
+        from v_ralph import display_phase_timing
+
+        with patch('v_ralph.info') as mock_info:
+            display_phase_timing("Coder invocation", 15.5, True)
+            mock_info.assert_called_once()
+            call_arg = mock_info.call_args[0][0]
+            assert "[TIMING]" in call_arg
+            assert "Coder invocation" in call_arg
+            assert "15.5s" in call_arg
+
+    def test_display_phase_timing_verbose_disabled(self):
+        """Test that display_phase_timing is silent when verbose=False."""
+        sys.path.insert(0, str(__file__).rsplit('/tests/', 1)[0])
+        from v_ralph import display_phase_timing
+
+        with patch('v_ralph.info') as mock_info:
+            display_phase_timing("Coder invocation", 15.5, False)
+            mock_info.assert_not_called()
+
+    def test_display_phase_timing_formats_minutes(self):
+        """Test that display_phase_timing formats longer times correctly."""
+        sys.path.insert(0, str(__file__).rsplit('/tests/', 1)[0])
+        from v_ralph import display_phase_timing
+
+        with patch('v_ralph.info') as mock_info:
+            display_phase_timing("Validation", 125, True)  # 2m 5s
+            call_arg = mock_info.call_args[0][0]
+            assert "2m 5s" in call_arg
+
+
+class TestDisplayTimingsOnly:
+    """Tests for the display_timings_only function."""
+
+    def test_display_timings_only_calls_header(self):
+        """Test that display_timings_only shows header."""
+        sys.path.insert(0, str(__file__).rsplit('/tests/', 1)[0])
+        from v_ralph import display_timings_only, PhaseTimings
+
+        timings = PhaseTimings(coder_time=10.0, validation_time=5.0, audit_time=2.0)
+
+        with patch('v_ralph.header') as mock_header:
+            with patch('v_ralph.info'):
+                display_timings_only(timings, 20.0)
+                mock_header.assert_called_once_with("Execution Timings")
+
+    def test_display_timings_only_shows_phases(self):
+        """Test that display_timings_only shows all phase timings."""
+        sys.path.insert(0, str(__file__).rsplit('/tests/', 1)[0])
+        from v_ralph import display_timings_only, PhaseTimings
+
+        timings = PhaseTimings(coder_time=10.0, validation_time=5.5, audit_time=2.0)
+
+        with patch('v_ralph.header'):
+            with patch('v_ralph.info') as mock_info:
+                # Force plain text mode
+                with patch('shared.console.RICH_AVAILABLE', False):
+                    display_timings_only(timings, 20.0)
+                    # Should be called multiple times for phases + total
+                    assert mock_info.call_count >= 4
+
+    def test_display_timings_only_shows_total(self):
+        """Test that display_timings_only shows total time."""
+        sys.path.insert(0, str(__file__).rsplit('/tests/', 1)[0])
+        from v_ralph import display_timings_only, PhaseTimings
+
+        timings = PhaseTimings(coder_time=10.0, validation_time=5.0, audit_time=2.0)
+
+        with patch('v_ralph.header'):
+            with patch('v_ralph.info') as mock_info:
+                display_timings_only(timings, 25.5)
+                # Check that total time is shown
+                calls = [str(c) for c in mock_info.call_args_list]
+                assert any("Total time" in c or "25.5s" in c for c in calls)
+
+    def test_display_timings_only_formats_hours(self):
+        """Test that display_timings_only formats hours correctly."""
+        sys.path.insert(0, str(__file__).rsplit('/tests/', 1)[0])
+        from v_ralph import display_timings_only, PhaseTimings
+
+        timings = PhaseTimings(coder_time=3600.0, validation_time=0, audit_time=0)
+
+        with patch('v_ralph.header'):
+            with patch('v_ralph.info') as mock_info:
+                display_timings_only(timings, 3661.0)  # 1h 1m 1s
+                calls = [str(c) for c in mock_info.call_args_list]
+                assert any("1h" in c for c in calls)

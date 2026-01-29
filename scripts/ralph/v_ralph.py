@@ -23,6 +23,55 @@ from shared.errors import PRDNotFoundError, StoryNotFoundError, RalphError
 
 
 @dataclass
+class PhaseTimings:
+    """Timing data for execution phases.
+
+    Tracks time spent in each phase of execution: coder invocation,
+    validation, and audit.
+    """
+
+    coder_time: float = 0.0
+    validation_time: float = 0.0
+    audit_time: float = 0.0
+
+    @property
+    def total_phase_time(self) -> float:
+        """Total time across all phases."""
+        return self.coder_time + self.validation_time + self.audit_time
+
+    def format_time(self, seconds: float) -> str:
+        """Format a time value in seconds as human-readable string.
+
+        Args:
+            seconds: Time in seconds
+
+        Returns:
+            Formatted time string (e.g., "1.5s", "2m 30s")
+        """
+        if seconds < 60:
+            return f"{seconds:.1f}s"
+        minutes = int(seconds // 60)
+        secs = int(seconds % 60)
+        if minutes < 60:
+            return f"{minutes}m {secs}s"
+        hours = minutes // 60
+        minutes = minutes % 60
+        return f"{hours}h {minutes}m {secs}s"
+
+    def get_breakdown(self) -> list[tuple[str, float, str]]:
+        """Get timing breakdown as list of (phase_name, seconds, formatted).
+
+        Returns:
+            List of tuples with phase name, raw seconds, and formatted string
+        """
+        return [
+            ("Coder invocation", self.coder_time, self.format_time(self.coder_time)),
+            ("Validation", self.validation_time, self.format_time(self.validation_time)),
+            ("Audit", self.audit_time, self.format_time(self.audit_time)),
+        ]
+
+
+@dataclass
 class ExecutionSummary:
     """Summary statistics for a Ralph execution run.
 
@@ -39,6 +88,7 @@ class ExecutionSummary:
     files_changed: int = 0
     commits: list[str] = field(default_factory=list)
     escalated_stories: list[tuple[str, str]] = field(default_factory=list)  # (story_id, reason)
+    phase_timings: PhaseTimings = field(default_factory=PhaseTimings)
 
     @property
     def elapsed_time(self) -> float:
@@ -96,6 +146,13 @@ class ExecutionSummary:
                 lines.append(f"  - {sha}")
         else:
             lines.append("Commits made:      0")
+
+        # Phase timing breakdown
+        if self.phase_timings.total_phase_time > 0:
+            lines.append("")
+            lines.append("Phase breakdown:")
+            for phase_name, _, formatted in self.phase_timings.get_breakdown():
+                lines.append(f"  - {phase_name}: {formatted}")
 
         # Escalated stories
         if self.escalated_stories:
@@ -264,6 +321,74 @@ def display_verbose_retry_history(
     if verbose and retry_history:
         info("")
         retry_history_panel(retry_history)
+
+
+def display_phase_timing(phase_name: str, elapsed: float, verbose: bool) -> None:
+    """Display timing for a single phase when verbose mode is enabled.
+
+    Args:
+        phase_name: Name of the phase (e.g., "Coder invocation")
+        elapsed: Time elapsed in seconds
+        verbose: Whether verbose mode is enabled
+    """
+    if verbose:
+        if elapsed < 60:
+            formatted = f"{elapsed:.1f}s"
+        else:
+            minutes = int(elapsed // 60)
+            secs = int(elapsed % 60)
+            formatted = f"{minutes}m {secs}s"
+        info(f"[TIMING] {phase_name}: {formatted}")
+
+
+def display_timings_only(phase_timings: PhaseTimings, total_elapsed: float) -> None:
+    """Display only timing information (for --timings flag).
+
+    Shows timing for each phase and total time without other verbose output.
+
+    Args:
+        phase_timings: PhaseTimings dataclass with timing data
+        total_elapsed: Total elapsed time in seconds
+    """
+    header("Execution Timings")
+    info("")
+
+    # Format total time
+    if total_elapsed < 60:
+        total_formatted = f"{total_elapsed:.1f}s"
+    elif total_elapsed < 3600:
+        minutes = int(total_elapsed // 60)
+        secs = int(total_elapsed % 60)
+        total_formatted = f"{minutes}m {secs}s"
+    else:
+        hours = int(total_elapsed // 3600)
+        minutes = int((total_elapsed % 3600) // 60)
+        secs = int(total_elapsed % 60)
+        total_formatted = f"{hours}h {minutes}m {secs}s"
+
+    # Display each phase
+    try:
+        from shared.console import RICH_AVAILABLE, _get_console
+        if RICH_AVAILABLE:
+            console = _get_console()
+            for phase_name, seconds, formatted in phase_timings.get_breakdown():
+                if seconds > 0:
+                    console.print(f"  [cyan]{phase_name}:[/cyan] {formatted}")
+                else:
+                    console.print(f"  [dim]{phase_name}:[/dim] -")
+            console.print("")
+            console.print(f"  [bold]Total time:[/bold] {total_formatted}")
+        else:
+            raise ImportError("Using plain text mode")
+    except Exception:
+        # Plain text fallback
+        for phase_name, seconds, formatted in phase_timings.get_breakdown():
+            if seconds > 0:
+                info(f"  {phase_name}: {formatted}")
+            else:
+                info(f"  {phase_name}: -")
+        info("")
+        info(f"  Total time: {total_formatted}")
 
 
 def display_error(err: RalphError) -> None:
@@ -1228,6 +1353,7 @@ def cmd_run(args: argparse.Namespace) -> int:
     debug_enabled = getattr(args, 'debug', False)
     # Debug mode includes verbose mode
     verbose = getattr(args, 'verbose', False) or debug_enabled
+    show_timings = getattr(args, 'timings', False)
 
     header(f"Running story: [{story_id}] {story_title}")
 
@@ -1256,6 +1382,26 @@ def cmd_run(args: argparse.Namespace) -> int:
     # verbose_validation_output(validation_result, verbose) - to show full validation output
     info("(Execution would happen here - this is a placeholder)")
 
+    # Simulated phase timings for demonstration (in real impl, these track actual execution)
+    # Example of how timing would be tracked during actual execution:
+    # coder_start = time.time()
+    # ... run coder ...
+    # summary.phase_timings.coder_time = time.time() - coder_start
+    #
+    # validation_start = time.time()
+    # ... run validation ...
+    # summary.phase_timings.validation_time = time.time() - validation_start
+    #
+    # audit_start = time.time()
+    # ... run audit ...
+    # summary.phase_timings.audit_time = time.time() - audit_start
+
+    # Display phase timings in verbose mode
+    if verbose and summary.phase_timings.total_phase_time > 0:
+        display_phase_timing("Coder invocation", summary.phase_timings.coder_time, verbose)
+        display_phase_timing("Validation", summary.phase_timings.validation_time, verbose)
+        display_phase_timing("Audit", summary.phase_timings.audit_time, verbose)
+
     # In a real execution, these would be updated based on actual results:
     # summary.stories_passed += 1  # if story passed
     # summary.stories_failed += 1  # if story failed
@@ -1266,8 +1412,14 @@ def cmd_run(args: argparse.Namespace) -> int:
 
     # Finish and display the summary
     summary.finish()
-    info("")
-    summary.display()
+
+    # Show timings-only output if --timings flag is used
+    if show_timings:
+        info("")
+        display_timings_only(summary.phase_timings, summary.elapsed_time)
+    else:
+        info("")
+        summary.display()
 
     return 0
 
@@ -1344,6 +1496,11 @@ def main() -> int:
         '--skip-validation',
         action='store_true',
         help='Skip validation phase for specified story (requires --story)'
+    )
+    run_parser.add_argument(
+        '--timings',
+        action='store_true',
+        help='Show only timing information without full verbose output'
     )
     run_parser.set_defaults(func=cmd_run)
 
