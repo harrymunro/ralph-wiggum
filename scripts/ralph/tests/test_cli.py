@@ -2051,3 +2051,288 @@ class TestInteractiveModeIntegration:
                 with patch('v_ralph.info'):
                     exit_code = cmd_run(args)
                     assert exit_code == 0
+
+
+class TestResetAttemptsFlag:
+    """Tests for the --reset-attempts flag."""
+
+    def test_reset_attempts_flag_parsed(self):
+        """Test that --reset-attempts flag is recognized by the parser."""
+        sys.path.insert(0, str(__file__).rsplit('/tests/', 1)[0])
+        from v_ralph import main
+
+        with patch('sys.argv', ['v_ralph', 'run', '--reset-attempts', '--story', 'US-001', '--dry-run']):
+            with patch('v_ralph.cmd_run') as mock_run:
+                mock_run.return_value = 0
+                main()
+                args = mock_run.call_args[0][0]
+                assert args.reset_attempts is True
+
+    def test_reset_attempts_flag_default_is_false(self):
+        """Test that --reset-attempts flag defaults to False when not provided."""
+        sys.path.insert(0, str(__file__).rsplit('/tests/', 1)[0])
+        from v_ralph import main
+
+        with patch('sys.argv', ['v_ralph', 'run', '--dry-run']):
+            with patch('v_ralph.cmd_run') as mock_run:
+                mock_run.return_value = 0
+                main()
+                args = mock_run.call_args[0][0]
+                assert args.reset_attempts is False
+
+    def test_reset_attempts_flag_in_help_output(self):
+        """Test that --reset-attempts appears in run --help output."""
+        sys.path.insert(0, str(__file__).rsplit('/tests/', 1)[0])
+        from v_ralph import main
+
+        with patch('sys.argv', ['v_ralph', 'run', '--help']):
+            with pytest.raises(SystemExit) as exc_info:
+                with patch('sys.stdout.write') as mock_write:
+                    main()
+            # Help exits with code 0
+            assert exc_info.value.code == 0
+
+    def test_reset_attempts_requires_story_flag(self, tmp_path):
+        """Test that --reset-attempts requires --story to be specified."""
+        sys.path.insert(0, str(__file__).rsplit('/tests/', 1)[0])
+        from v_ralph import cmd_run
+
+        # Create a valid PRD file
+        prd_file = tmp_path / "prd.json"
+        prd_file.write_text(json.dumps({
+            "project": "Test Project",
+            "userStories": [{"id": "US-001", "title": "Story 1", "passes": False}]
+        }))
+
+        args = argparse.Namespace(
+            prd=str(prd_file),
+            dry_run=False,
+            story=None,
+            max_retries=3,
+            verbose=False,
+            debug=False,
+            interactive=False,
+            reset_attempts=True,
+            skip_validation=False
+        )
+
+        with patch('v_ralph.error') as mock_error:
+            with patch('v_ralph.info'):
+                exit_code = cmd_run(args)
+                assert exit_code == 1
+                mock_error.assert_called_once()
+                assert "--reset-attempts requires --story" in mock_error.call_args[0][0]
+
+    def test_reset_attempts_works_with_story_flag(self, tmp_path):
+        """Test that --reset-attempts works when --story is provided."""
+        sys.path.insert(0, str(__file__).rsplit('/tests/', 1)[0])
+        from v_ralph import cmd_run
+
+        # Create a valid PRD file
+        prd_file = tmp_path / "prd.json"
+        prd_file.write_text(json.dumps({
+            "project": "Test Project",
+            "userStories": [{"id": "US-001", "title": "Story 1", "passes": False}]
+        }))
+
+        args = argparse.Namespace(
+            prd=str(prd_file),
+            dry_run=False,
+            story="US-001",
+            max_retries=3,
+            verbose=False,
+            debug=False,
+            interactive=False,
+            reset_attempts=True,
+            skip_validation=False
+        )
+
+        # Should not return error for missing --story
+        with patch('v_ralph.header'):
+            with patch('v_ralph.info'):
+                with patch('v_ralph.ExecutionSummary'):
+                    exit_code = cmd_run(args)
+                    # Should succeed (0) not error (1) for missing story flag
+                    assert exit_code == 0
+
+
+class TestSkipValidationFlag:
+    """Tests for the --skip-validation flag."""
+
+    def test_skip_validation_flag_parsed(self):
+        """Test that --skip-validation flag is recognized by the parser."""
+        sys.path.insert(0, str(__file__).rsplit('/tests/', 1)[0])
+        from v_ralph import main
+
+        with patch('sys.argv', ['v_ralph', 'run', '--skip-validation', '--story', 'US-001', '--dry-run']):
+            with patch('v_ralph.cmd_run') as mock_run:
+                mock_run.return_value = 0
+                main()
+                args = mock_run.call_args[0][0]
+                assert args.skip_validation is True
+
+    def test_skip_validation_flag_default_is_false(self):
+        """Test that --skip-validation flag defaults to False when not provided."""
+        sys.path.insert(0, str(__file__).rsplit('/tests/', 1)[0])
+        from v_ralph import main
+
+        with patch('sys.argv', ['v_ralph', 'run', '--dry-run']):
+            with patch('v_ralph.cmd_run') as mock_run:
+                mock_run.return_value = 0
+                main()
+                args = mock_run.call_args[0][0]
+                assert args.skip_validation is False
+
+    def test_skip_validation_flag_in_help_output(self):
+        """Test that --skip-validation appears in run --help output."""
+        sys.path.insert(0, str(__file__).rsplit('/tests/', 1)[0])
+        from v_ralph import main
+
+        with patch('sys.argv', ['v_ralph', 'run', '--help']):
+            with pytest.raises(SystemExit) as exc_info:
+                with patch('sys.stdout.write') as mock_write:
+                    main()
+            # Help exits with code 0
+            assert exc_info.value.code == 0
+
+    def test_skip_validation_requires_story_flag(self, tmp_path):
+        """Test that --skip-validation requires --story to be specified."""
+        sys.path.insert(0, str(__file__).rsplit('/tests/', 1)[0])
+        from v_ralph import cmd_run
+
+        # Create a valid PRD file
+        prd_file = tmp_path / "prd.json"
+        prd_file.write_text(json.dumps({
+            "project": "Test Project",
+            "userStories": [{"id": "US-001", "title": "Story 1", "passes": False}]
+        }))
+
+        args = argparse.Namespace(
+            prd=str(prd_file),
+            dry_run=False,
+            story=None,
+            max_retries=3,
+            verbose=False,
+            debug=False,
+            interactive=False,
+            reset_attempts=False,
+            skip_validation=True
+        )
+
+        with patch('v_ralph.error') as mock_error:
+            with patch('v_ralph.info'):
+                exit_code = cmd_run(args)
+                assert exit_code == 1
+                mock_error.assert_called_once()
+                assert "--skip-validation requires --story" in mock_error.call_args[0][0]
+
+    def test_skip_validation_works_with_story_flag(self, tmp_path):
+        """Test that --skip-validation works when --story is provided."""
+        sys.path.insert(0, str(__file__).rsplit('/tests/', 1)[0])
+        from v_ralph import cmd_run
+
+        # Create a valid PRD file
+        prd_file = tmp_path / "prd.json"
+        prd_file.write_text(json.dumps({
+            "project": "Test Project",
+            "userStories": [{"id": "US-001", "title": "Story 1", "passes": False}]
+        }))
+
+        args = argparse.Namespace(
+            prd=str(prd_file),
+            dry_run=False,
+            story="US-001",
+            max_retries=3,
+            verbose=False,
+            debug=False,
+            interactive=False,
+            reset_attempts=False,
+            skip_validation=True
+        )
+
+        # Should not return error for missing --story
+        with patch('v_ralph.header'):
+            with patch('v_ralph.info'):
+                with patch('v_ralph.ExecutionSummary'):
+                    exit_code = cmd_run(args)
+                    # Should succeed (0) not error (1) for missing story flag
+                    assert exit_code == 0
+
+
+class TestRetryControlFlagsCombined:
+    """Tests for combined use of retry control flags."""
+
+    def test_both_flags_can_be_used_together(self):
+        """Test that both --reset-attempts and --skip-validation can be used together."""
+        sys.path.insert(0, str(__file__).rsplit('/tests/', 1)[0])
+        from v_ralph import main
+
+        with patch('sys.argv', ['v_ralph', 'run', '--reset-attempts', '--skip-validation', '--story', 'US-001', '--dry-run']):
+            with patch('v_ralph.cmd_run') as mock_run:
+                mock_run.return_value = 0
+                main()
+                args = mock_run.call_args[0][0]
+                assert args.reset_attempts is True
+                assert args.skip_validation is True
+
+    def test_reset_attempts_error_comes_first(self, tmp_path):
+        """Test that --reset-attempts error is reported before --skip-validation."""
+        sys.path.insert(0, str(__file__).rsplit('/tests/', 1)[0])
+        from v_ralph import cmd_run
+
+        # Create a valid PRD file
+        prd_file = tmp_path / "prd.json"
+        prd_file.write_text(json.dumps({
+            "project": "Test Project",
+            "userStories": [{"id": "US-001", "title": "Story 1", "passes": False}]
+        }))
+
+        args = argparse.Namespace(
+            prd=str(prd_file),
+            dry_run=False,
+            story=None,
+            max_retries=3,
+            verbose=False,
+            debug=False,
+            interactive=False,
+            reset_attempts=True,
+            skip_validation=True
+        )
+
+        with patch('v_ralph.error') as mock_error:
+            with patch('v_ralph.info'):
+                exit_code = cmd_run(args)
+                assert exit_code == 1
+                # Should report reset-attempts error first
+                assert "--reset-attempts requires --story" in mock_error.call_args[0][0]
+
+    def test_both_flags_work_with_story(self, tmp_path):
+        """Test that both flags work when --story is provided."""
+        sys.path.insert(0, str(__file__).rsplit('/tests/', 1)[0])
+        from v_ralph import cmd_run
+
+        # Create a valid PRD file
+        prd_file = tmp_path / "prd.json"
+        prd_file.write_text(json.dumps({
+            "project": "Test Project",
+            "userStories": [{"id": "US-001", "title": "Story 1", "passes": False}]
+        }))
+
+        args = argparse.Namespace(
+            prd=str(prd_file),
+            dry_run=False,
+            story="US-001",
+            max_retries=3,
+            verbose=False,
+            debug=False,
+            interactive=False,
+            reset_attempts=True,
+            skip_validation=True
+        )
+
+        with patch('v_ralph.header'):
+            with patch('v_ralph.info'):
+                with patch('v_ralph.ExecutionSummary'):
+                    exit_code = cmd_run(args)
+                    # Should not fail validation
+                    assert exit_code == 0

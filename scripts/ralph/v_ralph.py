@@ -1155,6 +1155,20 @@ def cmd_run(args: argparse.Namespace) -> int:
     """
     prd_path = args.prd
 
+    # Validate that --reset-attempts and --skip-validation require --story
+    reset_attempts = getattr(args, 'reset_attempts', False)
+    skip_validation = getattr(args, 'skip_validation', False)
+
+    if reset_attempts and not args.story:
+        error("Error: --reset-attempts requires --story to be specified")
+        info("Suggestion: Use --story <story-id> to specify which story to reset attempts for")
+        return 1
+
+    if skip_validation and not args.story:
+        error("Error: --skip-validation requires --story to be specified")
+        info("Suggestion: Use --story <story-id> to specify which story to skip validation for")
+        return 1
+
     # Dry-run mode performs comprehensive validation and exits
     if args.dry_run:
         return run_dry_run_validation(prd_path)
@@ -1320,6 +1334,16 @@ def main() -> int:
         '-i', '--interactive',
         action='store_true',
         help='Interactively select which story to run'
+    )
+    run_parser.add_argument(
+        '--reset-attempts',
+        action='store_true',
+        help='Clear attempt counter for specified story (requires --story)'
+    )
+    run_parser.add_argument(
+        '--skip-validation',
+        action='store_true',
+        help='Skip validation phase for specified story (requires --story)'
     )
     run_parser.set_defaults(func=cmd_run)
 
