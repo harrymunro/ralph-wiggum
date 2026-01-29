@@ -175,3 +175,42 @@ class Spinner:
             spinner = RichSpinner("dots", text=message)
             self._live.update(spinner)
         # In plain-text mode, we don't update the message mid-spin
+
+
+def progress_bar(completed: int, total: int, width: int = 30) -> None:
+    """Print a progress bar showing completion status.
+
+    Args:
+        completed: Number of completed items
+        total: Total number of items
+        width: Width of the progress bar in characters (default: 30)
+    """
+    if total == 0:
+        percentage = 100.0
+    else:
+        percentage = (completed / total) * 100
+
+    filled = int(width * completed / total) if total > 0 else width
+    empty = width - filled
+
+    bar_text = f"{completed} of {total} stories complete ({percentage:.0f}%)"
+
+    if RICH_AVAILABLE:
+        console = _get_console()
+        if console:
+            # Create a visual progress bar with rich formatting
+            filled_char = "█"
+            empty_char = "░"
+            bar = filled_char * filled + empty_char * empty
+            if percentage == 100:
+                console.print(f"[green]Progress: [{bar}] {bar_text}[/green]")
+            elif percentage >= 50:
+                console.print(f"[blue]Progress: [{bar}] {bar_text}[/blue]")
+            else:
+                console.print(f"[yellow]Progress: [{bar}] {bar_text}[/yellow]")
+    else:
+        # Plain-text fallback
+        filled_char = "#"
+        empty_char = "-"
+        bar = filled_char * filled + empty_char * empty
+        print(f"Progress: [{bar}] {bar_text}")

@@ -243,3 +243,71 @@ class TestSpinner:
                 # Stop event should still be set after exception
                 if spinner_instance._stop_event:
                     assert spinner_instance._stop_event.is_set()
+
+
+class TestProgressBar:
+    """Test suite for progress_bar function."""
+
+    def test_progress_bar_can_be_imported(self) -> None:
+        """Test that progress_bar can be imported from the console module."""
+        from shared.console import progress_bar
+        assert progress_bar is not None
+
+    def test_progress_bar_shows_percentage(self) -> None:
+        """Test that progress_bar shows correct percentage."""
+        from shared.console import progress_bar
+        with patch.object(console, 'RICH_AVAILABLE', False):
+            captured_output = StringIO()
+            with patch('sys.stdout', captured_output):
+                progress_bar(5, 10)
+            output = captured_output.getvalue()
+            assert "50%" in output
+            assert "5 of 10 stories complete" in output
+
+    def test_progress_bar_shows_visual_bar(self) -> None:
+        """Test that progress_bar shows a visual bar."""
+        from shared.console import progress_bar
+        with patch.object(console, 'RICH_AVAILABLE', False):
+            captured_output = StringIO()
+            with patch('sys.stdout', captured_output):
+                progress_bar(3, 10)
+            output = captured_output.getvalue()
+            assert "Progress:" in output
+            assert "[" in output
+            assert "]" in output
+            assert "#" in output  # Filled portion
+            assert "-" in output  # Empty portion
+
+    def test_progress_bar_zero_total(self) -> None:
+        """Test progress_bar handles zero total gracefully."""
+        from shared.console import progress_bar
+        with patch.object(console, 'RICH_AVAILABLE', False):
+            captured_output = StringIO()
+            with patch('sys.stdout', captured_output):
+                progress_bar(0, 0)
+            output = captured_output.getvalue()
+            assert "100%" in output
+
+    def test_progress_bar_full_completion(self) -> None:
+        """Test progress_bar shows 100% when all complete."""
+        from shared.console import progress_bar
+        with patch.object(console, 'RICH_AVAILABLE', False):
+            captured_output = StringIO()
+            with patch('sys.stdout', captured_output):
+                progress_bar(10, 10)
+            output = captured_output.getvalue()
+            assert "100%" in output
+            assert "10 of 10 stories complete" in output
+
+    def test_progress_bar_with_rich(self) -> None:
+        """Test progress_bar uses rich formatting when available."""
+        if console.RICH_AVAILABLE:
+            from shared.console import progress_bar
+            mock_console = MagicMock()
+            with patch.object(console, '_console', mock_console):
+                with patch.object(console, '_get_console', return_value=mock_console):
+                    progress_bar(5, 10)
+                    mock_console.print.assert_called_once()
+                    call_args = mock_console.print.call_args[0][0]
+                    assert "Progress:" in call_args
+                    assert "50%" in call_args

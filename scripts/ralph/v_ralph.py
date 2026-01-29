@@ -12,7 +12,7 @@ import sys
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
-from shared.console import success, error, warning, info, header
+from shared.console import success, error, warning, info, header, progress_bar
 
 
 def load_prd(prd_path: str) -> Optional[Dict[str, Any]]:
@@ -163,6 +163,10 @@ def cmd_status(args: argparse.Namespace) -> int:
         success(f"  All {total} stories complete!")
     else:
         info(f"  Total: {total} | Passed: {passed} | Pending: {pending} | Skipped: {skipped}")
+
+    # Print progress bar
+    info("")
+    progress_bar(passed, total)
 
     return 0
 
