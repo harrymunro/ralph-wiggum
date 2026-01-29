@@ -3009,3 +3009,280 @@ class TestGitSafetyIntegration:
                         result = cmd_run(args)
                         # Should return 0 (proceed despite unsafe state)
                         assert result == 0
+
+
+class TestTimeoutFlags:
+    """Tests for the --validation-timeout, --coder-timeout, and --audit-timeout flags."""
+
+    def test_validation_timeout_flag_parsed(self):
+        """Test that --validation-timeout flag is recognized by the parser."""
+        sys.path.insert(0, str(__file__).rsplit('/tests/', 1)[0])
+        from v_ralph import main
+
+        with patch('sys.argv', ['v_ralph', 'run', '--validation-timeout', '60', '--dry-run']):
+            with patch('v_ralph.cmd_run') as mock_run:
+                mock_run.return_value = 0
+                main()
+                args = mock_run.call_args[0][0]
+                assert args.validation_timeout == 60
+
+    def test_coder_timeout_flag_parsed(self):
+        """Test that --coder-timeout flag is recognized by the parser."""
+        sys.path.insert(0, str(__file__).rsplit('/tests/', 1)[0])
+        from v_ralph import main
+
+        with patch('sys.argv', ['v_ralph', 'run', '--coder-timeout', '600', '--dry-run']):
+            with patch('v_ralph.cmd_run') as mock_run:
+                mock_run.return_value = 0
+                main()
+                args = mock_run.call_args[0][0]
+                assert args.coder_timeout == 600
+
+    def test_audit_timeout_flag_parsed(self):
+        """Test that --audit-timeout flag is recognized by the parser."""
+        sys.path.insert(0, str(__file__).rsplit('/tests/', 1)[0])
+        from v_ralph import main
+
+        with patch('sys.argv', ['v_ralph', 'run', '--audit-timeout', '240', '--dry-run']):
+            with patch('v_ralph.cmd_run') as mock_run:
+                mock_run.return_value = 0
+                main()
+                args = mock_run.call_args[0][0]
+                assert args.audit_timeout == 240
+
+    def test_timeout_flags_default_to_none(self):
+        """Test that timeout flags default to None when not provided."""
+        sys.path.insert(0, str(__file__).rsplit('/tests/', 1)[0])
+        from v_ralph import main
+
+        with patch('sys.argv', ['v_ralph', 'run', '--dry-run']):
+            with patch('v_ralph.cmd_run') as mock_run:
+                mock_run.return_value = 0
+                main()
+                args = mock_run.call_args[0][0]
+                assert args.validation_timeout is None
+                assert args.coder_timeout is None
+                assert args.audit_timeout is None
+
+    def test_all_timeout_flags_together(self):
+        """Test that all timeout flags can be used together."""
+        sys.path.insert(0, str(__file__).rsplit('/tests/', 1)[0])
+        from v_ralph import main
+
+        with patch('sys.argv', ['v_ralph', 'run',
+                               '--validation-timeout', '30',
+                               '--coder-timeout', '500',
+                               '--audit-timeout', '150',
+                               '--dry-run']):
+            with patch('v_ralph.cmd_run') as mock_run:
+                mock_run.return_value = 0
+                main()
+                args = mock_run.call_args[0][0]
+                assert args.validation_timeout == 30
+                assert args.coder_timeout == 500
+                assert args.audit_timeout == 150
+
+    def test_timeout_flags_in_help_output(self):
+        """Test that timeout flags appear in run --help output."""
+        sys.path.insert(0, str(__file__).rsplit('/tests/', 1)[0])
+        from v_ralph import main
+
+        with patch('sys.argv', ['v_ralph', 'run', '--help']):
+            with pytest.raises(SystemExit) as exc_info:
+                with patch('sys.stdout.write') as mock_write:
+                    main()
+            # Help exits with code 0
+            assert exc_info.value.code == 0
+
+
+class TestExecutionTimeouts:
+    """Tests for the ExecutionTimeouts dataclass."""
+
+    def test_default_timeouts(self):
+        """Test that ExecutionTimeouts has correct default values."""
+        sys.path.insert(0, str(__file__).rsplit('/tests/', 1)[0])
+        from v_ralph import ExecutionTimeouts, DEFAULT_VALIDATION_TIMEOUT, DEFAULT_CODER_TIMEOUT, DEFAULT_AUDIT_TIMEOUT
+
+        timeouts = ExecutionTimeouts()
+        assert timeouts.validation == DEFAULT_VALIDATION_TIMEOUT
+        assert timeouts.coder == DEFAULT_CODER_TIMEOUT
+        assert timeouts.audit == DEFAULT_AUDIT_TIMEOUT
+
+    def test_default_timeout_values(self):
+        """Test that default timeout constants have expected values."""
+        sys.path.insert(0, str(__file__).rsplit('/tests/', 1)[0])
+        from v_ralph import DEFAULT_VALIDATION_TIMEOUT, DEFAULT_CODER_TIMEOUT, DEFAULT_AUDIT_TIMEOUT
+
+        assert DEFAULT_VALIDATION_TIMEOUT == 120
+        assert DEFAULT_CODER_TIMEOUT == 300
+        assert DEFAULT_AUDIT_TIMEOUT == 180
+
+    def test_custom_timeouts(self):
+        """Test that ExecutionTimeouts can be created with custom values."""
+        sys.path.insert(0, str(__file__).rsplit('/tests/', 1)[0])
+        from v_ralph import ExecutionTimeouts
+
+        timeouts = ExecutionTimeouts(validation=60, coder=600, audit=240)
+        assert timeouts.validation == 60
+        assert timeouts.coder == 600
+        assert timeouts.audit == 240
+
+
+class TestExecutionTimeoutsFromPrdAndArgs:
+    """Tests for the ExecutionTimeouts.from_prd_and_args class method."""
+
+    def test_uses_defaults_when_no_prd_or_args(self):
+        """Test that defaults are used when no PRD timeouts or CLI args provided."""
+        sys.path.insert(0, str(__file__).rsplit('/tests/', 1)[0])
+        from v_ralph import ExecutionTimeouts, DEFAULT_VALIDATION_TIMEOUT, DEFAULT_CODER_TIMEOUT, DEFAULT_AUDIT_TIMEOUT
+
+        prd_data = {"project": "Test"}
+        timeouts = ExecutionTimeouts.from_prd_and_args(prd_data)
+
+        assert timeouts.validation == DEFAULT_VALIDATION_TIMEOUT
+        assert timeouts.coder == DEFAULT_CODER_TIMEOUT
+        assert timeouts.audit == DEFAULT_AUDIT_TIMEOUT
+
+    def test_uses_prd_timeouts_when_present(self):
+        """Test that PRD timeouts override defaults."""
+        sys.path.insert(0, str(__file__).rsplit('/tests/', 1)[0])
+        from v_ralph import ExecutionTimeouts
+
+        prd_data = {
+            "project": "Test",
+            "timeouts": {
+                "validation": 60,
+                "coder": 600,
+                "audit": 240
+            }
+        }
+        timeouts = ExecutionTimeouts.from_prd_and_args(prd_data)
+
+        assert timeouts.validation == 60
+        assert timeouts.coder == 600
+        assert timeouts.audit == 240
+
+    def test_cli_args_override_prd_timeouts(self):
+        """Test that CLI args override PRD timeouts."""
+        sys.path.insert(0, str(__file__).rsplit('/tests/', 1)[0])
+        from v_ralph import ExecutionTimeouts
+
+        prd_data = {
+            "project": "Test",
+            "timeouts": {
+                "validation": 60,
+                "coder": 600,
+                "audit": 240
+            }
+        }
+        timeouts = ExecutionTimeouts.from_prd_and_args(
+            prd_data,
+            validation_timeout=30,
+            coder_timeout=500,
+            audit_timeout=150
+        )
+
+        assert timeouts.validation == 30
+        assert timeouts.coder == 500
+        assert timeouts.audit == 150
+
+    def test_cli_args_override_defaults_when_no_prd_timeouts(self):
+        """Test that CLI args override defaults when no PRD timeouts present."""
+        sys.path.insert(0, str(__file__).rsplit('/tests/', 1)[0])
+        from v_ralph import ExecutionTimeouts
+
+        prd_data = {"project": "Test"}
+        timeouts = ExecutionTimeouts.from_prd_and_args(
+            prd_data,
+            validation_timeout=45,
+            coder_timeout=450,
+            audit_timeout=200
+        )
+
+        assert timeouts.validation == 45
+        assert timeouts.coder == 450
+        assert timeouts.audit == 200
+
+    def test_partial_prd_timeouts(self):
+        """Test that partial PRD timeouts work (only some specified)."""
+        sys.path.insert(0, str(__file__).rsplit('/tests/', 1)[0])
+        from v_ralph import ExecutionTimeouts, DEFAULT_CODER_TIMEOUT, DEFAULT_AUDIT_TIMEOUT
+
+        prd_data = {
+            "project": "Test",
+            "timeouts": {
+                "validation": 90
+            }
+        }
+        timeouts = ExecutionTimeouts.from_prd_and_args(prd_data)
+
+        assert timeouts.validation == 90
+        assert timeouts.coder == DEFAULT_CODER_TIMEOUT
+        assert timeouts.audit == DEFAULT_AUDIT_TIMEOUT
+
+    def test_partial_cli_override(self):
+        """Test that partial CLI override works (only some specified)."""
+        sys.path.insert(0, str(__file__).rsplit('/tests/', 1)[0])
+        from v_ralph import ExecutionTimeouts, DEFAULT_VALIDATION_TIMEOUT, DEFAULT_AUDIT_TIMEOUT
+
+        prd_data = {"project": "Test"}
+        timeouts = ExecutionTimeouts.from_prd_and_args(
+            prd_data,
+            coder_timeout=500
+        )
+
+        assert timeouts.validation == DEFAULT_VALIDATION_TIMEOUT
+        assert timeouts.coder == 500
+        assert timeouts.audit == DEFAULT_AUDIT_TIMEOUT
+
+    def test_mixed_prd_and_cli_override(self):
+        """Test that PRD and CLI overrides work together (CLI wins for overlaps)."""
+        sys.path.insert(0, str(__file__).rsplit('/tests/', 1)[0])
+        from v_ralph import ExecutionTimeouts, DEFAULT_AUDIT_TIMEOUT
+
+        prd_data = {
+            "project": "Test",
+            "timeouts": {
+                "validation": 60,
+                "coder": 600
+            }
+        }
+        # Only override validation via CLI, coder comes from PRD, audit is default
+        timeouts = ExecutionTimeouts.from_prd_and_args(
+            prd_data,
+            validation_timeout=30
+        )
+
+        assert timeouts.validation == 30  # CLI override
+        assert timeouts.coder == 600  # From PRD
+        assert timeouts.audit == DEFAULT_AUDIT_TIMEOUT  # Default
+
+    def test_empty_prd_timeouts_object(self):
+        """Test that empty timeouts object in PRD uses defaults."""
+        sys.path.insert(0, str(__file__).rsplit('/tests/', 1)[0])
+        from v_ralph import ExecutionTimeouts, DEFAULT_VALIDATION_TIMEOUT, DEFAULT_CODER_TIMEOUT, DEFAULT_AUDIT_TIMEOUT
+
+        prd_data = {
+            "project": "Test",
+            "timeouts": {}
+        }
+        timeouts = ExecutionTimeouts.from_prd_and_args(prd_data)
+
+        assert timeouts.validation == DEFAULT_VALIDATION_TIMEOUT
+        assert timeouts.coder == DEFAULT_CODER_TIMEOUT
+        assert timeouts.audit == DEFAULT_AUDIT_TIMEOUT
+
+    def test_non_dict_prd_timeouts_ignored(self):
+        """Test that non-dict timeouts value in PRD is ignored."""
+        sys.path.insert(0, str(__file__).rsplit('/tests/', 1)[0])
+        from v_ralph import ExecutionTimeouts, DEFAULT_VALIDATION_TIMEOUT, DEFAULT_CODER_TIMEOUT, DEFAULT_AUDIT_TIMEOUT
+
+        prd_data = {
+            "project": "Test",
+            "timeouts": "invalid"
+        }
+        timeouts = ExecutionTimeouts.from_prd_and_args(prd_data)
+
+        assert timeouts.validation == DEFAULT_VALIDATION_TIMEOUT
+        assert timeouts.coder == DEFAULT_CODER_TIMEOUT
+        assert timeouts.audit == DEFAULT_AUDIT_TIMEOUT

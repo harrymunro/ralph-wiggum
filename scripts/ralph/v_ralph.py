@@ -71,6 +71,76 @@ class PhaseTimings:
         ]
 
 
+# Default timeout values in seconds
+DEFAULT_VALIDATION_TIMEOUT = 120
+DEFAULT_CODER_TIMEOUT = 300
+DEFAULT_AUDIT_TIMEOUT = 180
+
+
+@dataclass
+class ExecutionTimeouts:
+    """Timeout configuration for execution phases.
+
+    Timeouts can be specified via CLI flags or in prd.json under a 'timeouts' object.
+    CLI flags override prd.json values.
+
+    Attributes:
+        validation: Timeout for validation phase in seconds (default: 120)
+        coder: Timeout for coder invocation in seconds (default: 300)
+        audit: Timeout for audit phase in seconds (default: 180)
+    """
+
+    validation: int = DEFAULT_VALIDATION_TIMEOUT
+    coder: int = DEFAULT_CODER_TIMEOUT
+    audit: int = DEFAULT_AUDIT_TIMEOUT
+
+    @classmethod
+    def from_prd_and_args(
+        cls,
+        prd_data: Dict[str, Any],
+        validation_timeout: int | None = None,
+        coder_timeout: int | None = None,
+        audit_timeout: int | None = None
+    ) -> 'ExecutionTimeouts':
+        """Create ExecutionTimeouts from PRD data and CLI arguments.
+
+        CLI arguments override PRD values, which override defaults.
+
+        Args:
+            prd_data: Parsed PRD dictionary
+            validation_timeout: CLI --validation-timeout value (or None)
+            coder_timeout: CLI --coder-timeout value (or None)
+            audit_timeout: CLI --audit-timeout value (or None)
+
+        Returns:
+            ExecutionTimeouts with resolved values
+        """
+        # Start with defaults
+        validation = DEFAULT_VALIDATION_TIMEOUT
+        coder = DEFAULT_CODER_TIMEOUT
+        audit = DEFAULT_AUDIT_TIMEOUT
+
+        # Override with PRD values if present
+        prd_timeouts = prd_data.get('timeouts', {})
+        if isinstance(prd_timeouts, dict):
+            if 'validation' in prd_timeouts:
+                validation = int(prd_timeouts['validation'])
+            if 'coder' in prd_timeouts:
+                coder = int(prd_timeouts['coder'])
+            if 'audit' in prd_timeouts:
+                audit = int(prd_timeouts['audit'])
+
+        # CLI flags override everything
+        if validation_timeout is not None:
+            validation = validation_timeout
+        if coder_timeout is not None:
+            coder = coder_timeout
+        if audit_timeout is not None:
+            audit = audit_timeout
+
+        return cls(validation=validation, coder=coder, audit=audit)
+
+
 @dataclass
 class ExecutionSummary:
     """Summary statistics for a Ralph execution run.
@@ -1602,9 +1672,18 @@ def cmd_run(args: argparse.Namespace) -> int:
     debug_environment(debug_enabled)
     debug_file_path(prd_path, "PRD file", debug_enabled)
 
+    # Resolve timeouts from PRD and CLI args
+    timeouts = ExecutionTimeouts.from_prd_and_args(
+        prd,
+        validation_timeout=getattr(args, 'validation_timeout', None),
+        coder_timeout=getattr(args, 'coder_timeout', None),
+        audit_timeout=getattr(args, 'audit_timeout', None)
+    )
+
     # Verbose mode shows additional details
     verbose_log(f"Story priority: {target_story.get('priority', 'N/A')}", verbose)
     verbose_log(f"Max retries: {args.max_retries}", verbose)
+    verbose_log(f"Timeouts: validation={timeouts.validation}s, coder={timeouts.coder}s, audit={timeouts.audit}s", verbose)
 
     # Debug mode shows full story details
     debug_log(f"Story description: {target_story.get('description', 'N/A')}", debug_enabled)
@@ -1750,6 +1829,27 @@ def main() -> int:
         '--force',
         action='store_true',
         help='Proceed even if git safety checks detect unsafe state'
+    )
+    run_parser.add_argument(
+        '--validation-timeout',
+        type=int,
+        default=None,
+        metavar='SECONDS',
+        help='Validation timeout in seconds (default: 120, or from prd.json)'
+    )
+    run_parser.add_argument(
+        '--coder-timeout',
+        type=int,
+        default=None,
+        metavar='SECONDS',
+        help='Coder invocation timeout in seconds (default: 300, or from prd.json)'
+    )
+    run_parser.add_argument(
+        '--audit-timeout',
+        type=int,
+        default=None,
+        metavar='SECONDS',
+        help='Audit timeout in seconds (default: 180, or from prd.json)'
     )
     run_parser.set_defaults(func=cmd_run)
 
