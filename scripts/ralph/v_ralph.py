@@ -15,6 +15,13 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Dict, List, Tuple
 
+# Try to import yaml for YAML PRD support
+try:
+    import yaml
+    YAML_AVAILABLE = True
+except ImportError:
+    YAML_AVAILABLE = False
+
 from shared.console import (
     success, error, warning, info, header, progress_bar, debug, summary_box,
     feedback_panel, escalate_panel, retry_history_panel
@@ -510,7 +517,10 @@ def check_prd_exists(prd_path: str) -> ValidationCheck:
 
 
 def check_prd_valid_json(prd_path: str) -> Tuple[ValidationCheck, Dict[str, Any] | None]:
-    """Check if PRD file contains valid JSON.
+    """Check if PRD file contains valid JSON or YAML.
+
+    Files with .yml or .yaml extension are validated as YAML.
+    Files with .json extension (or any other) are validated as JSON.
 
     Args:
         prd_path: Path to the PRD file
@@ -520,30 +530,53 @@ def check_prd_valid_json(prd_path: str) -> Tuple[ValidationCheck, Dict[str, Any]
     """
     if not os.path.isfile(prd_path):
         return ValidationCheck(
-            name="PRD is valid JSON",
+            name="PRD is valid",
             passed=False,
-            message="Cannot check JSON - file does not exist"
+            message="Cannot check format - file does not exist"
         ), None
+
+    prd_format = get_prd_format(prd_path)
+    format_name = "YAML" if prd_format == 'yaml' else "JSON"
 
     try:
         with open(prd_path, 'r') as f:
-            prd_data = json.load(f)
+            content = f.read()
+
+        if prd_format == 'yaml':
+            if not YAML_AVAILABLE:
+                return ValidationCheck(
+                    name="PRD is valid YAML",
+                    passed=False,
+                    message="YAML support requires PyYAML. Install with: pip install pyyaml"
+                ), None
+            prd_data = yaml.safe_load(content)
+        else:
+            prd_data = json.loads(content)
+
         return ValidationCheck(
-            name="PRD is valid JSON",
+            name=f"PRD is valid {format_name}",
             passed=True,
-            message="PRD contains valid JSON"
+            message=f"PRD contains valid {format_name}"
         ), prd_data
     except json.JSONDecodeError as e:
         return ValidationCheck(
-            name="PRD is valid JSON",
+            name=f"PRD is valid {format_name}",
             passed=False,
-            message=f"Invalid JSON: {e}"
+            message=f"Invalid {format_name}: {e}"
         ), None
     except Exception as e:
+        # Catch YAML errors and other exceptions
+        error_msg = str(e)
+        if YAML_AVAILABLE and isinstance(e, yaml.YAMLError):
+            return ValidationCheck(
+                name=f"PRD is valid {format_name}",
+                passed=False,
+                message=f"Invalid {format_name}: {error_msg}"
+            ), None
         return ValidationCheck(
-            name="PRD is valid JSON",
+            name=f"PRD is valid {format_name}",
             passed=False,
-            message=f"Error reading file: {e}"
+            message=f"Error reading file: {error_msg}"
         ), None
 
 
@@ -944,8 +977,26 @@ def run_dry_run_validation(prd_path: str) -> int:
         return 1
 
 
+def get_prd_format(prd_path: str) -> str:
+    """Determine the format of a PRD file based on extension.
+
+    Args:
+        prd_path: Path to the PRD file
+
+    Returns:
+        Format string: 'yaml' for .yml/.yaml files, 'json' otherwise
+    """
+    ext = os.path.splitext(prd_path)[1].lower()
+    if ext in ('.yml', '.yaml'):
+        return 'yaml'
+    return 'json'
+
+
 def load_prd(prd_path: str) -> Dict[str, Any]:
-    """Load and parse a PRD JSON file.
+    """Load and parse a PRD file (JSON or YAML).
+
+    Files with .yml or .yaml extension are parsed as YAML.
+    Files with .json extension (or any other) are parsed as JSON.
 
     Args:
         prd_path: Path to the PRD file
@@ -955,19 +1006,35 @@ def load_prd(prd_path: str) -> Dict[str, Any]:
 
     Raises:
         PRDNotFoundError: If the PRD file is not found
-        ValueError: If the PRD file contains invalid JSON
+        ValueError: If the PRD file contains invalid JSON/YAML or YAML is not available
     """
+    prd_format = get_prd_format(prd_path)
+
     try:
         with open(prd_path, 'r') as f:
-            return json.load(f)
+            content = f.read()
     except FileNotFoundError:
         raise PRDNotFoundError(prd_path)
-    except json.JSONDecodeError as e:
-        raise ValueError(f"Invalid JSON in PRD file: {e}")
+
+    if prd_format == 'yaml':
+        if not YAML_AVAILABLE:
+            raise ValueError("YAML PRD files require PyYAML. Install with: pip install pyyaml")
+        try:
+            return yaml.safe_load(content)
+        except yaml.YAMLError as e:
+            raise ValueError(f"Invalid YAML in PRD file: {e}")
+    else:
+        try:
+            return json.loads(content)
+        except json.JSONDecodeError as e:
+            raise ValueError(f"Invalid JSON in PRD file: {e}")
 
 
 def save_prd(prd_path: str, prd_data: Dict[str, Any]) -> bool:
-    """Save PRD data to a JSON file.
+    """Save PRD data to a file, preserving original format.
+
+    Files with .yml or .yaml extension are saved as YAML.
+    Files with .json extension (or any other) are saved as JSON.
 
     Args:
         prd_path: Path to the PRD file
@@ -976,10 +1043,18 @@ def save_prd(prd_path: str, prd_data: Dict[str, Any]) -> bool:
     Returns:
         True if save was successful, False otherwise
     """
+    prd_format = get_prd_format(prd_path)
+
     try:
         with open(prd_path, 'w') as f:
-            json.dump(prd_data, f, indent=2)
-            f.write('\n')
+            if prd_format == 'yaml':
+                if not YAML_AVAILABLE:
+                    error("YAML PRD files require PyYAML. Install with: pip install pyyaml")
+                    return False
+                yaml.dump(prd_data, f, default_flow_style=False, sort_keys=False, allow_unicode=True)
+            else:
+                json.dump(prd_data, f, indent=2)
+                f.write('\n')
         return True
     except Exception as e:
         error(f"Failed to save PRD: {e}")
