@@ -27,8 +27,6 @@ Based on [Geoffrey Huntley's Ralph pattern](https://ghuntley.com/ralph/).
 - **Use sandboxing** - Run Ralph in a Docker container, VM, or isolated sandbox environment to limit potential damage
 - **Review commits before pushing** - Always review what Ralph committed before pushing to remote
 
-See [docs/SECURITY.md](docs/SECURITY.md) for complete security guidance, including pre-flight checklists and emergency stop procedures.
-
 ---
 
 ## Why This Exists
@@ -59,26 +57,25 @@ Ralph works best when you have:
 
 ## How It Works
 
+V-Ralph implements a three-layer validation model:
+
 ```
 ┌─────────────────────────────────────────────────────────────┐
-│                      ralph.sh loop                          │
+│                    V-Ralph Execution Loop                   │
 ├─────────────────────────────────────────────────────────────┤
 │                                                             │
-│   1. Spawn fresh Claude Code instance                       │
+│   1. Read prd.json → pick next story (passes: false)        │
 │                          ↓                                  │
-│   2. Read prd.json → pick next story (passes: false)        │
+│   2. CODER: Implement the story with Claude Code            │
 │                          ↓                                  │
-│   3. Read progress.txt → learn from previous iterations     │
+│   3. VALIDATION: Run quality checks (typecheck, lint, test) │
 │                          ↓                                  │
-│   4. Implement the story                                    │
+│   4. AUDITOR: Semantic review by separate Claude instance   │
+│       - PASS → commit and mark story complete               │
+│       - RETRY → loop back to coder with feedback            │
+│       - ESCALATE → stop and request human input             │
 │                          ↓                                  │
-│   5. Run quality checks (typecheck, lint, test)             │
-│                          ↓                                  │
-│   6. If passing: commit, mark story passes: true            │
-│                          ↓                                  │
-│   7. Append learnings to progress.txt                       │
-│                          ↓                                  │
-│   8. All stories done? → EXIT                               │
+│   5. All stories done? → EXIT                               │
 │      More stories? → LOOP (back to step 1)                  │
 │                                                             │
 └─────────────────────────────────────────────────────────────┘
@@ -91,37 +88,28 @@ Ralph works best when you have:
 ### Prerequisites
 
 - [Claude Code](https://docs.anthropic.com/en/docs/claude-code) installed and authenticated (`npm install -g @anthropic-ai/claude-code`)
-- `jq` installed (`brew install jq` on macOS)
+- Python 3.8 or later
 - A git repository for your project
 
 ### Installation
 
-**Step 1: Copy Ralph to your project (required)**
+**Step 1: Copy V-Ralph to your project**
 
 ```bash
 # From your project root
 mkdir -p scripts/ralph
-cp /path/to/ralph-wiggum/ralph.sh scripts/ralph/
-cp /path/to/ralph-wiggum/CLAUDE.md scripts/ralph/CLAUDE.md
-chmod +x scripts/ralph/ralph.sh
+cp -r /path/to/ralph-wiggum/scripts/ralph/* scripts/ralph/
 ```
 
-**Step 2: Install skills (choose one)**
-
-*Option A: Install skills globally*
+**Step 2: Install the planning skill (optional)**
 
 ```bash
-cp -r /path/to/ralph-wiggum/skills/prd ~/.claude/skills/
-cp -r /path/to/ralph-wiggum/skills/ralph ~/.claude/skills/
-```
+# Install globally
+cp -r /path/to/ralph-wiggum/.claude/skills/v-ralph-planning ~/.claude/skills/
 
-*Option B: Install skills locally to project*
-
-```bash
-# From your project root
+# Or install locally to project
 mkdir -p .claude/skills
-cp -r /path/to/ralph-wiggum/skills/prd .claude/skills/
-cp -r /path/to/ralph-wiggum/skills/ralph .claude/skills/
+cp -r /path/to/ralph-wiggum/.claude/skills/v-ralph-planning .claude/skills/
 ```
 
 ---
@@ -130,31 +118,31 @@ cp -r /path/to/ralph-wiggum/skills/ralph .claude/skills/
 
 ### 1. Create a PRD
 
-Use the PRD skill to generate a detailed requirements document:
+Use the V-Ralph planning skill to generate a machine-verifiable specification:
 
 ```
-Load the prd skill and create a PRD for [your feature description]
+/v-ralph-planning
 ```
 
-Answer the clarifying questions. The skill saves output to `tasks/prd-[feature-name].md`.
+Answer the clarifying questions. The skill produces a `prd.json` with verifiable acceptance criteria.
 
-### 2. Convert PRD to Ralph format
-
-Use the Ralph skill to convert the markdown PRD to JSON:
-
-```
-Load the ralph skill and convert tasks/prd-[feature-name].md to prd.json
-```
-
-This creates `prd.json` with user stories structured for autonomous execution.
-
-### 3. Run Ralph
+### 2. Run V-Ralph
 
 ```bash
-./scripts/ralph/ralph.sh [max_iterations]
-```
+cd scripts/ralph
 
-Default is 10 iterations.
+# Check status of all stories
+python v_ralph.py status
+
+# Execute pending stories
+python v_ralph.py run
+
+# Execute a specific story
+python v_ralph.py run --story US-001
+
+# Preview what would run
+python v_ralph.py run --dry-run
+```
 
 ---
 
@@ -162,11 +150,12 @@ Default is 10 iterations.
 
 | Command | Description |
 |---------|-------------|
-| `./ralph.sh` | Run Ralph with default 10 iterations |
-| `./ralph.sh 25` | Run Ralph with 25 max iterations |
-| `./ralph.sh --skip-security-check` | Skip the security pre-flight check |
-| `cat prd.json \| jq '.userStories[] \| {id, title, passes}'` | Check story status |
-| `cat progress.txt` | View learnings from previous iterations |
+| `python v_ralph.py status` | Show status of all stories |
+| `python v_ralph.py run` | Execute all pending stories |
+| `python v_ralph.py run --story US-001` | Execute a specific story |
+| `python v_ralph.py run --dry-run` | Preview without executing |
+| `python v_ralph.py run --max-retries 3` | Set retry limit per story |
+| `python v_ralph.py --help` | Show all available options |
 
 ---
 
@@ -174,17 +163,24 @@ Default is 10 iterations.
 
 | File | Purpose |
 |------|---------|
-| `ralph.sh` | The bash loop that spawns fresh Claude Code instances |
-| `CLAUDE.md` | Instructions given to each Claude Code instance |
-| `prd.json` | User stories with `passes` status (the task list) |
-| `prd.json.example` | Example PRD format for reference |
+| `scripts/ralph/v_ralph.py` | Main CLI entry point |
+| `scripts/ralph/micro_v/` | Executor and auditor components |
+| `scripts/ralph/shared/` | Common utilities (PRD, git, progress) |
+| `scripts/ralph/CLAUDE.md` | Instructions for coding agents |
+| `prd.json` | User stories with `passes` status |
 | `progress.txt` | Append-only learnings for future iterations |
-| `skills/prd/` | Skill for generating PRDs |
-| `skills/ralph/` | Skill for converting PRDs to JSON |
 
 ---
 
 ## Critical Concepts
+
+### Three-Layer Validation
+
+V-Ralph implements rigorous validation to catch "green build hallucinations":
+
+1. **Coder** - Implements the story according to acceptance criteria
+2. **Validation** - Runs typecheck, lint, and tests (necessary but not sufficient)
+3. **Auditor** - Separate Claude instance reviews if implementation satisfies the *spirit* of the spec
 
 ### Each Iteration = Fresh Context
 
@@ -208,9 +204,15 @@ Each PRD item should be small enough to complete in one context window. If a tas
 - "Add authentication"
 - "Refactor the API"
 
-### CLAUDE.md Updates Are Critical
+### Verifiable Acceptance Criteria
 
-After each iteration, Ralph updates the relevant `CLAUDE.md` files with learnings. This is key because Claude Code automatically reads these files, so future iterations (and future human developers) benefit from discovered patterns, gotchas, and conventions.
+The planning skill enforces machine-verifiable criteria:
+
+| Bad (Vague) | Good (Verifiable) |
+|-------------|-------------------|
+| "Works correctly" | "Returns 200 status for valid input" |
+| "Good error handling" | "Raises ValueError with message 'Invalid ID'" |
+| "Proper testing" | "tests/test_feature.py exists and passes" |
 
 ### Feedback Loops
 
@@ -221,7 +223,7 @@ Ralph only works if there are feedback loops:
 
 ### Stop Condition
 
-When all stories have `passes: true`, Ralph outputs `<promise>COMPLETE</promise>` and the loop exits.
+When all stories have `passes: true`, V-Ralph exits with code 0.
 
 ---
 
@@ -234,12 +236,26 @@ When all stories have `passes: true`, Ralph outputs `<promise>COMPLETE</promise>
 | Context runs out mid-story | Story is too big. Split it into smaller, focused changes. |
 | Progress not persisting | Check that `progress.txt` exists and is being committed. |
 | Wrong branch | Verify `branchName` in `prd.json` matches your intended branch. |
+| Story escalated | Human input needed - review the escalation reason and clarify the spec. |
 
 ---
 
-## Archiving
+## Development
 
-Ralph automatically archives previous runs when you start a new feature (different `branchName`). Archives are saved to `archive/YYYY-MM-DD-feature-name/`.
+### Running Tests
+
+```bash
+cd scripts/ralph
+
+# Run all tests
+python -m pytest tests/ -v
+
+# Run only unit tests
+python -m pytest tests/ -v --ignore=tests/test_integration.py
+
+# Run integration tests
+python -m pytest tests/test_integration.py -v
+```
 
 ---
 
