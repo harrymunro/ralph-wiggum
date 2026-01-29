@@ -162,6 +162,8 @@ Default is 10 iterations.
 
 ## Commands
 
+### Bash Script (ralph.sh)
+
 | Command | Description |
 |---------|-------------|
 | `./ralph.sh` | Run Ralph with default 10 iterations |
@@ -169,6 +171,63 @@ Default is 10 iterations.
 | `./ralph.sh --skip-security-check` | Skip the security pre-flight check |
 | `cat prd.json \| jq '.userStories[] \| {id, title, passes}'` | Check story status |
 | `cat progress.txt` | View learnings from previous iterations |
+
+### Python CLI (v_ralph.py)
+
+V-Ralph is a Python CLI for managing and executing Ralph user stories. It provides colored terminal output, progress tracking, and enhanced debugging capabilities.
+
+**Basic usage:**
+
+```bash
+cd scripts/ralph
+python3 v_ralph.py status                 # Show PRD status with progress bar
+python3 v_ralph.py run                    # Run next pending story
+python3 v_ralph.py health                 # Check progress.txt health
+```
+
+**Run command flags:**
+
+| Flag | Description |
+|------|-------------|
+| `--story STORY` | Run specific story by ID |
+| `--dry-run` | Validate configuration without executing |
+| `--max-retries N` | Maximum retry attempts per story (default: 3) |
+| `-v, --verbose` | Show truncated prompts and full validation output |
+| `--debug` | Show full prompts, file paths, environment info (includes verbose) |
+| `-i, --interactive` | Interactively select which story to run |
+| `--reset-attempts` | Clear attempt counter for specified story (requires --story) |
+| `--skip-validation` | Skip validation phase for specified story (requires --story) |
+| `--timings` | Show only timing information |
+| `--force` | Proceed even if git safety checks detect unsafe state |
+| `--validation-timeout SECONDS` | Validation timeout (default: 120, or from prd.json) |
+| `--coder-timeout SECONDS` | Coder invocation timeout (default: 300, or from prd.json) |
+| `--audit-timeout SECONDS` | Audit timeout (default: 180, or from prd.json) |
+
+**Status command flags:**
+
+| Flag | Description |
+|------|-------------|
+| `--estimate` | Show token estimates per story |
+
+**Global flags:**
+
+| Flag | Description |
+|------|-------------|
+| `--prd PATH` | Path to PRD file (default: prd.json) |
+
+**PRD format support:**
+
+V-Ralph supports both JSON (`.json`) and YAML (`.yml`, `.yaml`) PRD files. Timeouts can be configured in prd.json:
+
+```json
+{
+  "timeouts": {
+    "validation": 120,
+    "coder": 300,
+    "audit": 180
+  }
+}
+```
 
 ---
 
