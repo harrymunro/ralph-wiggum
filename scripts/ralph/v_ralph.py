@@ -15,7 +15,10 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Dict, List, Tuple
 
-from shared.console import success, error, warning, info, header, progress_bar, debug, summary_box
+from shared.console import (
+    success, error, warning, info, header, progress_bar, debug, summary_box,
+    feedback_panel, escalate_panel, retry_history_panel
+)
 from shared.errors import PRDNotFoundError, StoryNotFoundError, RalphError
 
 
@@ -212,6 +215,55 @@ def debug_environment(debug_enabled: bool) -> None:
         debug(f"  Python: {sys.version}")
         debug(f"  Platform: {platform.platform()}")
         debug(f"  Working directory: {os.getcwd()}")
+
+
+def display_retry_feedback(
+    feedback_message: str,
+    iteration: int,
+    verbose: bool = False
+) -> None:
+    """Display RETRY audit feedback in a styled panel.
+
+    Args:
+        feedback_message: The feedback message from the auditor
+        iteration: Current iteration number
+        verbose: Whether verbose mode is enabled (for logging)
+    """
+    feedback_panel("RETRY", feedback_message, iteration=iteration)
+    if verbose:
+        verbose_log(f"Retry feedback received at iteration {iteration}", True)
+
+
+def display_escalate_feedback(
+    reason: str,
+    story_id: str,
+    verbose: bool = False
+) -> None:
+    """Display ESCALATE audit feedback prominently.
+
+    Args:
+        reason: The reason for escalation
+        story_id: The ID of the story being escalated
+        verbose: Whether verbose mode is enabled (for logging)
+    """
+    escalate_panel(reason, story_id=story_id)
+    if verbose:
+        verbose_log(f"Story {story_id} escalated: {reason}", True)
+
+
+def display_verbose_retry_history(
+    retry_history: list[tuple[int, str]],
+    verbose: bool
+) -> None:
+    """Display the history of all retries when verbose mode is enabled.
+
+    Args:
+        retry_history: List of (iteration_number, feedback_message) tuples
+        verbose: Whether verbose mode is enabled
+    """
+    if verbose and retry_history:
+        info("")
+        retry_history_panel(retry_history)
 
 
 def display_error(err: RalphError) -> None:

@@ -1246,3 +1246,123 @@ class TestEstimateFlag:
         args = argparse.Namespace(prd=str(prd_file), estimate=True)
         exit_code = cmd_status(args)
         assert exit_code == 0
+
+
+class TestDisplayRetryFeedback:
+    """Tests for the display_retry_feedback function."""
+
+    def test_display_retry_feedback_calls_feedback_panel(self):
+        """Test that display_retry_feedback calls feedback_panel correctly."""
+        sys.path.insert(0, str(__file__).rsplit('/tests/', 1)[0])
+        from v_ralph import display_retry_feedback
+
+        with patch('v_ralph.feedback_panel') as mock_panel:
+            display_retry_feedback("Test feedback message", iteration=2)
+            mock_panel.assert_called_once_with("RETRY", "Test feedback message", iteration=2)
+
+    def test_display_retry_feedback_with_verbose_logs(self):
+        """Test that display_retry_feedback logs in verbose mode."""
+        sys.path.insert(0, str(__file__).rsplit('/tests/', 1)[0])
+        from v_ralph import display_retry_feedback
+
+        with patch('v_ralph.feedback_panel'):
+            with patch('v_ralph.verbose_log') as mock_log:
+                display_retry_feedback("Test message", iteration=3, verbose=True)
+                mock_log.assert_called_once()
+                call_args = mock_log.call_args[0]
+                assert "iteration 3" in call_args[0]
+
+    def test_display_retry_feedback_without_verbose_no_log(self):
+        """Test that display_retry_feedback does not log when verbose is False."""
+        sys.path.insert(0, str(__file__).rsplit('/tests/', 1)[0])
+        from v_ralph import display_retry_feedback
+
+        with patch('v_ralph.feedback_panel'):
+            with patch('v_ralph.verbose_log') as mock_log:
+                display_retry_feedback("Test message", iteration=1, verbose=False)
+                mock_log.assert_not_called()
+
+
+class TestDisplayEscalateFeedback:
+    """Tests for the display_escalate_feedback function."""
+
+    def test_display_escalate_feedback_calls_escalate_panel(self):
+        """Test that display_escalate_feedback calls escalate_panel correctly."""
+        sys.path.insert(0, str(__file__).rsplit('/tests/', 1)[0])
+        from v_ralph import display_escalate_feedback
+
+        with patch('v_ralph.escalate_panel') as mock_panel:
+            display_escalate_feedback("Blocking issue detected", story_id="US-005")
+            mock_panel.assert_called_once_with("Blocking issue detected", story_id="US-005")
+
+    def test_display_escalate_feedback_with_verbose_logs(self):
+        """Test that display_escalate_feedback logs in verbose mode."""
+        sys.path.insert(0, str(__file__).rsplit('/tests/', 1)[0])
+        from v_ralph import display_escalate_feedback
+
+        with patch('v_ralph.escalate_panel'):
+            with patch('v_ralph.verbose_log') as mock_log:
+                display_escalate_feedback("Human needed", story_id="US-010", verbose=True)
+                mock_log.assert_called_once()
+                call_args = mock_log.call_args[0]
+                assert "US-010" in call_args[0]
+                assert "escalated" in call_args[0]
+
+    def test_display_escalate_feedback_without_verbose_no_log(self):
+        """Test that display_escalate_feedback does not log when verbose is False."""
+        sys.path.insert(0, str(__file__).rsplit('/tests/', 1)[0])
+        from v_ralph import display_escalate_feedback
+
+        with patch('v_ralph.escalate_panel'):
+            with patch('v_ralph.verbose_log') as mock_log:
+                display_escalate_feedback("Issue", story_id="US-001", verbose=False)
+                mock_log.assert_not_called()
+
+
+class TestDisplayVerboseRetryHistory:
+    """Tests for the display_verbose_retry_history function."""
+
+    def test_display_verbose_retry_history_when_verbose(self):
+        """Test that retry history is shown when verbose is True."""
+        sys.path.insert(0, str(__file__).rsplit('/tests/', 1)[0])
+        from v_ralph import display_verbose_retry_history
+
+        retry_history = [
+            (1, "First failure"),
+            (2, "Second failure"),
+        ]
+        with patch('v_ralph.retry_history_panel') as mock_panel:
+            with patch('v_ralph.info'):
+                display_verbose_retry_history(retry_history, verbose=True)
+                mock_panel.assert_called_once_with(retry_history)
+
+    def test_display_verbose_retry_history_not_shown_when_not_verbose(self):
+        """Test that retry history is not shown when verbose is False."""
+        sys.path.insert(0, str(__file__).rsplit('/tests/', 1)[0])
+        from v_ralph import display_verbose_retry_history
+
+        retry_history = [(1, "Failure")]
+        with patch('v_ralph.retry_history_panel') as mock_panel:
+            display_verbose_retry_history(retry_history, verbose=False)
+            mock_panel.assert_not_called()
+
+    def test_display_verbose_retry_history_empty_list(self):
+        """Test that empty retry history does not call panel."""
+        sys.path.insert(0, str(__file__).rsplit('/tests/', 1)[0])
+        from v_ralph import display_verbose_retry_history
+
+        with patch('v_ralph.retry_history_panel') as mock_panel:
+            display_verbose_retry_history([], verbose=True)
+            mock_panel.assert_not_called()
+
+    def test_display_verbose_retry_history_prints_info_first(self):
+        """Test that info() is called for spacing before panel."""
+        sys.path.insert(0, str(__file__).rsplit('/tests/', 1)[0])
+        from v_ralph import display_verbose_retry_history
+
+        retry_history = [(1, "Test")]
+        with patch('v_ralph.retry_history_panel'):
+            with patch('v_ralph.info') as mock_info:
+                display_verbose_retry_history(retry_history, verbose=True)
+                # Should print empty line for spacing
+                mock_info.assert_called_once_with("")

@@ -259,3 +259,209 @@ def summary_box(title: str, lines: list[str], style: str = "blue") -> None:
             padded_line = f"| {line.ljust(max_width - 4)} |"
             print(padded_line)
         print(border)
+
+
+def wrap_text(text: str, width: int = 60) -> list[str]:
+    """Wrap text to a specified width for readability.
+
+    Args:
+        text: The text to wrap
+        width: Maximum line width (default: 60)
+
+    Returns:
+        List of wrapped lines
+    """
+    if not text:
+        return []
+
+    words = text.split()
+    lines = []
+    current_line: list[str] = []
+    current_length = 0
+
+    for word in words:
+        word_length = len(word)
+        # Check if adding this word would exceed the width
+        if current_length + word_length + (1 if current_line else 0) > width:
+            if current_line:
+                lines.append(" ".join(current_line))
+                current_line = [word]
+                current_length = word_length
+            else:
+                # Word is longer than width, add it anyway
+                lines.append(word)
+                current_length = 0
+        else:
+            current_line.append(word)
+            current_length += word_length + (1 if len(current_line) > 1 else 0)
+
+    if current_line:
+        lines.append(" ".join(current_line))
+
+    return lines
+
+
+def feedback_panel(
+    feedback_type: str,
+    message: str,
+    iteration: int | None = None,
+    width: int = 60
+) -> None:
+    """Display audit feedback in a distinct bordered panel.
+
+    For RETRY feedback, displays in a yellow bordered panel.
+    For other feedback types, uses blue styling.
+
+    Args:
+        feedback_type: Type of feedback (e.g., "RETRY", "INFO")
+        message: The feedback message to display
+        iteration: Optional iteration number for context
+        width: Width for word-wrapping (default: 60)
+    """
+    # Word-wrap the message for readability
+    wrapped_lines = wrap_text(message, width)
+
+    # Build title with iteration if provided
+    if iteration is not None:
+        title = f"Audit Feedback - {feedback_type} (Iteration {iteration})"
+    else:
+        title = f"Audit Feedback - {feedback_type}"
+
+    # Choose style based on feedback type
+    if feedback_type.upper() == "RETRY":
+        style = "yellow"
+    else:
+        style = "blue"
+
+    if RICH_AVAILABLE:
+        console = _get_console()
+        if console:
+            content = "\n".join(wrapped_lines)
+            panel = Panel(
+                content,
+                title=title,
+                border_style=style,
+                padding=(1, 2)
+            )
+            console.print(panel)
+    else:
+        # Plain-text fallback with ASCII box
+        max_line_len = max(len(title) + 4, max((len(line) for line in wrapped_lines), default=0) + 4)
+        border = "+" + "-" * (max_line_len - 2) + "+"
+
+        print(border)
+        print(f"| {title.center(max_line_len - 4)} |")
+        print(border)
+        for line in wrapped_lines:
+            print(f"| {line.ljust(max_line_len - 4)} |")
+        print(border)
+
+
+def escalate_panel(reason: str, story_id: str | None = None, width: int = 60) -> None:
+    """Display an ESCALATE reason prominently with red background styling.
+
+    The escalation reason is displayed in a panel with red background
+    to make it highly visible and indicate a critical issue.
+
+    Args:
+        reason: The reason for escalation
+        story_id: Optional story ID for context
+        width: Width for word-wrapping (default: 60)
+    """
+    # Word-wrap the reason for readability
+    wrapped_lines = wrap_text(reason, width)
+
+    # Build title
+    if story_id:
+        title = f"⚠ ESCALATION REQUIRED - {story_id} ⚠"
+    else:
+        title = "⚠ ESCALATION REQUIRED ⚠"
+
+    if RICH_AVAILABLE:
+        console = _get_console()
+        if console:
+            content = "\n".join(wrapped_lines)
+            # Use red background with white text for prominence
+            text = Text(content, style="white on red")
+            panel = Panel(
+                text,
+                title=f"[bold white on red]{title}[/bold white on red]",
+                border_style="bold red",
+                padding=(1, 2)
+            )
+            console.print(panel)
+    else:
+        # Plain-text fallback with prominent markers
+        max_line_len = max(len(title) + 4, max((len(line) for line in wrapped_lines), default=0) + 4)
+        border = "!" + "=" * (max_line_len - 2) + "!"
+
+        print(border)
+        print(f"! {title.center(max_line_len - 4)} !")
+        print(border)
+        for line in wrapped_lines:
+            print(f"! {line.ljust(max_line_len - 4)} !")
+        print(border)
+
+
+def retry_history_panel(
+    retries: list[tuple[int, str]],
+    width: int = 60
+) -> None:
+    """Display the history of all retries in verbose mode.
+
+    Args:
+        retries: List of (iteration_number, feedback_message) tuples
+        width: Width for word-wrapping (default: 60)
+    """
+    if not retries:
+        return
+
+    title = f"Retry History ({len(retries)} retries)"
+
+    if RICH_AVAILABLE:
+        console = _get_console()
+        if console:
+            # Build content with each retry entry
+            content_parts = []
+            for iteration, feedback in retries:
+                content_parts.append(f"[bold]Iteration {iteration}:[/bold]")
+                wrapped = wrap_text(feedback, width - 4)  # Account for indentation
+                for line in wrapped:
+                    content_parts.append(f"  {line}")
+                content_parts.append("")  # Empty line between entries
+
+            # Remove trailing empty line
+            if content_parts and content_parts[-1] == "":
+                content_parts.pop()
+
+            content = "\n".join(content_parts)
+            panel = Panel(
+                content,
+                title=title,
+                border_style="dim",
+                padding=(1, 2)
+            )
+            console.print(panel)
+    else:
+        # Plain-text fallback
+        lines = []
+        for iteration, feedback in retries:
+            lines.append(f"Iteration {iteration}:")
+            wrapped = wrap_text(feedback, width - 4)
+            for line in wrapped:
+                lines.append(f"  {line}")
+            lines.append("")
+
+        # Remove trailing empty line
+        if lines and lines[-1] == "":
+            lines.pop()
+
+        max_line_len = max(len(title) + 4, max((len(line) for line in lines), default=0) + 4)
+        border = "+" + "-" * (max_line_len - 2) + "+"
+
+        print(border)
+        print(f"| {title.center(max_line_len - 4)} |")
+        print(border)
+        for line in lines:
+            print(f"| {line.ljust(max_line_len - 4)} |")
+        print(border)

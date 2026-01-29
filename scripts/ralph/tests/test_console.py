@@ -408,3 +408,239 @@ class TestSummaryBox:
                 summary_box("Title", ["Line"], style="green")
                 summary_box("Title", ["Line"], style="red")
                 summary_box("Title", ["Line"], style="yellow")
+
+
+class TestWrapText:
+    """Test suite for wrap_text function."""
+
+    def test_wrap_text_can_be_imported(self) -> None:
+        """Test that wrap_text can be imported from the console module."""
+        from shared.console import wrap_text
+        assert wrap_text is not None
+
+    def test_wrap_text_empty_string(self) -> None:
+        """Test wrap_text with empty string returns empty list."""
+        from shared.console import wrap_text
+        result = wrap_text("")
+        assert result == []
+
+    def test_wrap_text_short_string(self) -> None:
+        """Test wrap_text with short string returns single line."""
+        from shared.console import wrap_text
+        result = wrap_text("Hello world", width=60)
+        assert len(result) == 1
+        assert result[0] == "Hello world"
+
+    def test_wrap_text_long_string(self) -> None:
+        """Test wrap_text with long string wraps properly."""
+        from shared.console import wrap_text
+        long_text = "This is a very long message that should be wrapped across multiple lines when displayed."
+        result = wrap_text(long_text, width=30)
+        assert len(result) > 1
+        for line in result:
+            # Each line should be close to width limit
+            assert len(line) <= 35  # Allow some wiggle room for word boundaries
+
+    def test_wrap_text_preserves_words(self) -> None:
+        """Test wrap_text doesn't break words in the middle."""
+        from shared.console import wrap_text
+        text = "one two three four five"
+        result = wrap_text(text, width=10)
+        all_words = " ".join(result).split()
+        assert all_words == ["one", "two", "three", "four", "five"]
+
+    def test_wrap_text_handles_long_word(self) -> None:
+        """Test wrap_text handles a word longer than width."""
+        from shared.console import wrap_text
+        text = "superlongwordthatexceedswidth normal"
+        result = wrap_text(text, width=10)
+        assert len(result) >= 1
+        # Long word should still be present
+        all_text = " ".join(result)
+        assert "superlongwordthatexceedswidth" in all_text
+
+
+class TestFeedbackPanel:
+    """Test suite for feedback_panel function."""
+
+    def test_feedback_panel_can_be_imported(self) -> None:
+        """Test that feedback_panel can be imported from the console module."""
+        from shared.console import feedback_panel
+        assert feedback_panel is not None
+
+    def test_feedback_panel_retry_without_rich(self) -> None:
+        """Test feedback_panel for RETRY displays with proper formatting."""
+        from shared.console import feedback_panel
+        with patch.object(console, 'RICH_AVAILABLE', False):
+            captured_output = StringIO()
+            with patch('sys.stdout', captured_output):
+                feedback_panel("RETRY", "The test failed, please fix the issue.")
+            output = captured_output.getvalue()
+            assert "RETRY" in output
+            assert "Audit Feedback" in output
+            assert "test failed" in output
+
+    def test_feedback_panel_with_iteration(self) -> None:
+        """Test feedback_panel shows iteration number."""
+        from shared.console import feedback_panel
+        with patch.object(console, 'RICH_AVAILABLE', False):
+            captured_output = StringIO()
+            with patch('sys.stdout', captured_output):
+                feedback_panel("RETRY", "Please fix the issue.", iteration=3)
+            output = captured_output.getvalue()
+            assert "Iteration 3" in output
+
+    def test_feedback_panel_word_wraps(self) -> None:
+        """Test feedback_panel word-wraps long messages."""
+        from shared.console import feedback_panel
+        long_message = "This is a very long feedback message that should be wrapped across multiple lines for better readability in the terminal."
+        with patch.object(console, 'RICH_AVAILABLE', False):
+            captured_output = StringIO()
+            with patch('sys.stdout', captured_output):
+                feedback_panel("RETRY", long_message, width=40)
+            output = captured_output.getvalue()
+            # Should have multiple lines of content
+            lines = output.strip().split("\n")
+            assert len(lines) > 4  # Header + border + at least 2 content lines + border
+
+    def test_feedback_panel_with_rich(self) -> None:
+        """Test feedback_panel uses Panel when rich is available."""
+        if console.RICH_AVAILABLE:
+            from shared.console import feedback_panel
+            mock_console = MagicMock()
+            with patch.object(console, '_console', mock_console):
+                with patch.object(console, '_get_console', return_value=mock_console):
+                    feedback_panel("RETRY", "Test message", iteration=1)
+                    mock_console.print.assert_called_once()
+
+
+class TestEscalatePanel:
+    """Test suite for escalate_panel function."""
+
+    def test_escalate_panel_can_be_imported(self) -> None:
+        """Test that escalate_panel can be imported from the console module."""
+        from shared.console import escalate_panel
+        assert escalate_panel is not None
+
+    def test_escalate_panel_without_rich(self) -> None:
+        """Test escalate_panel displays prominently without rich."""
+        from shared.console import escalate_panel
+        with patch.object(console, 'RICH_AVAILABLE', False):
+            captured_output = StringIO()
+            with patch('sys.stdout', captured_output):
+                escalate_panel("Human intervention required due to blocking issue.")
+            output = captured_output.getvalue()
+            assert "ESCALATION" in output
+            assert "Human intervention" in output
+            # Should use prominent markers
+            assert "!" in output
+
+    def test_escalate_panel_with_story_id(self) -> None:
+        """Test escalate_panel shows story ID."""
+        from shared.console import escalate_panel
+        with patch.object(console, 'RICH_AVAILABLE', False):
+            captured_output = StringIO()
+            with patch('sys.stdout', captured_output):
+                escalate_panel("Blocking issue", story_id="US-001")
+            output = captured_output.getvalue()
+            assert "US-001" in output
+
+    def test_escalate_panel_word_wraps(self) -> None:
+        """Test escalate_panel word-wraps long reasons."""
+        from shared.console import escalate_panel
+        long_reason = "This story cannot be completed automatically because it requires human review of the security implications and manual approval of the proposed changes."
+        with patch.object(console, 'RICH_AVAILABLE', False):
+            captured_output = StringIO()
+            with patch('sys.stdout', captured_output):
+                escalate_panel(long_reason, width=40)
+            output = captured_output.getvalue()
+            lines = output.strip().split("\n")
+            assert len(lines) > 4
+
+    def test_escalate_panel_with_rich(self) -> None:
+        """Test escalate_panel uses styled Panel when rich is available."""
+        if console.RICH_AVAILABLE:
+            from shared.console import escalate_panel
+            mock_console = MagicMock()
+            with patch.object(console, '_console', mock_console):
+                with patch.object(console, '_get_console', return_value=mock_console):
+                    escalate_panel("Critical issue", story_id="US-002")
+                    mock_console.print.assert_called_once()
+
+
+class TestRetryHistoryPanel:
+    """Test suite for retry_history_panel function."""
+
+    def test_retry_history_panel_can_be_imported(self) -> None:
+        """Test that retry_history_panel can be imported from the console module."""
+        from shared.console import retry_history_panel
+        assert retry_history_panel is not None
+
+    def test_retry_history_panel_empty_list(self) -> None:
+        """Test retry_history_panel does nothing with empty list."""
+        from shared.console import retry_history_panel
+        with patch.object(console, 'RICH_AVAILABLE', False):
+            captured_output = StringIO()
+            with patch('sys.stdout', captured_output):
+                retry_history_panel([])
+            output = captured_output.getvalue()
+            assert output == ""
+
+    def test_retry_history_panel_single_retry(self) -> None:
+        """Test retry_history_panel with single retry entry."""
+        from shared.console import retry_history_panel
+        retries = [(1, "First attempt failed, please fix the issue.")]
+        with patch.object(console, 'RICH_AVAILABLE', False):
+            captured_output = StringIO()
+            with patch('sys.stdout', captured_output):
+                retry_history_panel(retries)
+            output = captured_output.getvalue()
+            assert "Retry History" in output
+            assert "1 retries" in output
+            assert "Iteration 1" in output
+            assert "First attempt failed" in output
+
+    def test_retry_history_panel_multiple_retries(self) -> None:
+        """Test retry_history_panel with multiple retry entries."""
+        from shared.console import retry_history_panel
+        retries = [
+            (1, "First issue"),
+            (2, "Second issue"),
+            (3, "Third issue"),
+        ]
+        with patch.object(console, 'RICH_AVAILABLE', False):
+            captured_output = StringIO()
+            with patch('sys.stdout', captured_output):
+                retry_history_panel(retries)
+            output = captured_output.getvalue()
+            assert "3 retries" in output
+            assert "Iteration 1" in output
+            assert "Iteration 2" in output
+            assert "Iteration 3" in output
+            assert "First issue" in output
+            assert "Second issue" in output
+            assert "Third issue" in output
+
+    def test_retry_history_panel_with_rich(self) -> None:
+        """Test retry_history_panel uses Panel when rich is available."""
+        if console.RICH_AVAILABLE:
+            from shared.console import retry_history_panel
+            mock_console = MagicMock()
+            retries = [(1, "Test feedback")]
+            with patch.object(console, '_console', mock_console):
+                with patch.object(console, '_get_console', return_value=mock_console):
+                    retry_history_panel(retries)
+                    mock_console.print.assert_called_once()
+
+    def test_retry_history_panel_word_wraps_feedback(self) -> None:
+        """Test retry_history_panel word-wraps long feedback messages."""
+        from shared.console import retry_history_panel
+        long_feedback = "This is a very long feedback message that should be wrapped across multiple lines for better readability."
+        retries = [(1, long_feedback)]
+        with patch.object(console, 'RICH_AVAILABLE', False):
+            captured_output = StringIO()
+            with patch('sys.stdout', captured_output):
+                retry_history_panel(retries, width=40)
+            output = captured_output.getvalue()
+            # Should have content wrapped
+            assert "This is a very long" in output
