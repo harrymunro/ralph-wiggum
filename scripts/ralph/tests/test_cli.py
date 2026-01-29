@@ -486,11 +486,19 @@ class TestExitCodes:
         sys.path.insert(0, str(__file__).rsplit('/tests/', 1)[0])
         from v_ralph import cmd_run
         import argparse
+        import subprocess
 
-        # Create a valid PRD file
+        # Create git repo to pass git check
+        subprocess.run(['git', 'init'], cwd=str(tmp_path), capture_output=True)
+
+        # Create a valid PRD file with verification commands
         prd_file = tmp_path / "prd.json"
         prd_file.write_text(json.dumps({
             "project": "Test Project",
+            "verificationCommands": {
+                "typecheck": "npm run build",
+                "test": "npm test"
+            },
             "userStories": [{"id": "US-001", "title": "Story 1", "passes": False}]
         }))
 
@@ -760,3 +768,265 @@ class TestExecutionSummary:
             lines_text = "\n".join(lines)
             assert "abc123" in lines_text
             assert "def456" in lines_text
+
+
+class TestValidationCheck:
+    """Tests for the ValidationCheck dataclass."""
+
+    def test_validation_check_creation(self):
+        """Test that ValidationCheck can be created with expected fields."""
+        sys.path.insert(0, str(__file__).rsplit('/tests/', 1)[0])
+        from v_ralph import ValidationCheck
+
+        check = ValidationCheck(
+            name="Test check",
+            passed=True,
+            message="Test passed"
+        )
+        assert check.name == "Test check"
+        assert check.passed is True
+        assert check.message == "Test passed"
+
+    def test_validation_check_failed(self):
+        """Test ValidationCheck with passed=False."""
+        sys.path.insert(0, str(__file__).rsplit('/tests/', 1)[0])
+        from v_ralph import ValidationCheck
+
+        check = ValidationCheck(
+            name="Failed check",
+            passed=False,
+            message="Something went wrong"
+        )
+        assert check.passed is False
+
+
+class TestCheckPrdExists:
+    """Tests for the check_prd_exists function."""
+
+    def test_prd_exists_when_file_exists(self, tmp_path):
+        """Test that check_prd_exists returns passed=True when file exists."""
+        sys.path.insert(0, str(__file__).rsplit('/tests/', 1)[0])
+        from v_ralph import check_prd_exists
+
+        prd_file = tmp_path / "prd.json"
+        prd_file.write_text("{}")
+
+        check = check_prd_exists(str(prd_file))
+        assert check.passed is True
+        assert "Found PRD" in check.message
+
+    def test_prd_exists_when_file_missing(self, tmp_path):
+        """Test that check_prd_exists returns passed=False when file missing."""
+        sys.path.insert(0, str(__file__).rsplit('/tests/', 1)[0])
+        from v_ralph import check_prd_exists
+
+        check = check_prd_exists(str(tmp_path / "missing.json"))
+        assert check.passed is False
+        assert "not found" in check.message
+
+
+class TestCheckPrdValidJson:
+    """Tests for the check_prd_valid_json function."""
+
+    def test_valid_json_returns_passed(self, tmp_path):
+        """Test that check_prd_valid_json returns passed=True for valid JSON."""
+        sys.path.insert(0, str(__file__).rsplit('/tests/', 1)[0])
+        from v_ralph import check_prd_valid_json
+
+        prd_file = tmp_path / "prd.json"
+        prd_file.write_text('{"project": "Test"}')
+
+        check, data = check_prd_valid_json(str(prd_file))
+        assert check.passed is True
+        assert data == {"project": "Test"}
+
+    def test_invalid_json_returns_failed(self, tmp_path):
+        """Test that check_prd_valid_json returns passed=False for invalid JSON."""
+        sys.path.insert(0, str(__file__).rsplit('/tests/', 1)[0])
+        from v_ralph import check_prd_valid_json
+
+        prd_file = tmp_path / "prd.json"
+        prd_file.write_text("not valid json {")
+
+        check, data = check_prd_valid_json(str(prd_file))
+        assert check.passed is False
+        assert data is None
+        assert "Invalid JSON" in check.message
+
+    def test_missing_file_returns_failed(self, tmp_path):
+        """Test that check_prd_valid_json returns passed=False for missing file."""
+        sys.path.insert(0, str(__file__).rsplit('/tests/', 1)[0])
+        from v_ralph import check_prd_valid_json
+
+        check, data = check_prd_valid_json(str(tmp_path / "missing.json"))
+        assert check.passed is False
+        assert data is None
+
+
+class TestCheckGitRepoExists:
+    """Tests for the check_git_repo_exists function."""
+
+    def test_git_repo_in_existing_repo(self, tmp_path):
+        """Test that check_git_repo_exists finds a git repo."""
+        sys.path.insert(0, str(__file__).rsplit('/tests/', 1)[0])
+        from v_ralph import check_git_repo_exists
+        import subprocess
+
+        # Create a git repo in tmp_path
+        subprocess.run(['git', 'init'], cwd=str(tmp_path), capture_output=True)
+        prd_file = tmp_path / "prd.json"
+        prd_file.write_text("{}")
+
+        check = check_git_repo_exists(str(prd_file))
+        assert check.passed is True
+        assert "found" in check.message.lower()
+
+    def test_git_repo_not_found(self, tmp_path):
+        """Test that check_git_repo_exists fails when no git repo."""
+        sys.path.insert(0, str(__file__).rsplit('/tests/', 1)[0])
+        from v_ralph import check_git_repo_exists
+
+        # Use a path outside any git repo
+        check = check_git_repo_exists(str(tmp_path / "prd.json"))
+        assert check.passed is False
+
+
+class TestCheckVerificationCommands:
+    """Tests for the check_verification_commands function."""
+
+    def test_verification_commands_present(self):
+        """Test that check passes when verification commands are set."""
+        sys.path.insert(0, str(__file__).rsplit('/tests/', 1)[0])
+        from v_ralph import check_verification_commands
+
+        prd_data = {
+            "verificationCommands": {
+                "typecheck": "npm run build",
+                "test": "npm test"
+            }
+        }
+        check = check_verification_commands(prd_data)
+        assert check.passed is True
+
+    def test_verification_commands_missing(self):
+        """Test that check fails when verification commands not set."""
+        sys.path.insert(0, str(__file__).rsplit('/tests/', 1)[0])
+        from v_ralph import check_verification_commands
+
+        prd_data = {}
+        check = check_verification_commands(prd_data)
+        assert check.passed is False
+        assert "No verificationCommands" in check.message
+
+    def test_verification_commands_partial(self):
+        """Test that check fails when some commands missing."""
+        sys.path.insert(0, str(__file__).rsplit('/tests/', 1)[0])
+        from v_ralph import check_verification_commands
+
+        prd_data = {
+            "verificationCommands": {
+                "typecheck": "npm run build"
+                # missing "test"
+            }
+        }
+        check = check_verification_commands(prd_data)
+        assert check.passed is False
+        assert "test" in check.message
+
+    def test_verification_commands_with_none_prd(self):
+        """Test that check handles None PRD data."""
+        sys.path.insert(0, str(__file__).rsplit('/tests/', 1)[0])
+        from v_ralph import check_verification_commands
+
+        check = check_verification_commands(None)
+        assert check.passed is False
+        assert "Cannot check" in check.message
+
+
+class TestRunDryRunValidation:
+    """Tests for the run_dry_run_validation function."""
+
+    def test_dry_run_all_checks_pass(self, tmp_path):
+        """Test dry-run returns 0 when all checks pass."""
+        sys.path.insert(0, str(__file__).rsplit('/tests/', 1)[0])
+        from v_ralph import run_dry_run_validation
+        import subprocess
+
+        # Create git repo
+        subprocess.run(['git', 'init'], cwd=str(tmp_path), capture_output=True)
+
+        # Create valid PRD with verification commands
+        prd_file = tmp_path / "prd.json"
+        prd_file.write_text(json.dumps({
+            "project": "Test",
+            "verificationCommands": {
+                "typecheck": "npm run build",
+                "test": "npm test"
+            }
+        }))
+
+        exit_code = run_dry_run_validation(str(prd_file))
+        assert exit_code == 0
+
+    def test_dry_run_missing_prd_returns_1(self, tmp_path):
+        """Test dry-run returns 1 when PRD is missing."""
+        sys.path.insert(0, str(__file__).rsplit('/tests/', 1)[0])
+        from v_ralph import run_dry_run_validation
+
+        exit_code = run_dry_run_validation(str(tmp_path / "missing.json"))
+        assert exit_code == 1
+
+    def test_dry_run_invalid_json_returns_1(self, tmp_path):
+        """Test dry-run returns 1 when PRD has invalid JSON."""
+        sys.path.insert(0, str(__file__).rsplit('/tests/', 1)[0])
+        from v_ralph import run_dry_run_validation
+
+        prd_file = tmp_path / "prd.json"
+        prd_file.write_text("not valid json")
+
+        exit_code = run_dry_run_validation(str(prd_file))
+        assert exit_code == 1
+
+    def test_dry_run_reports_all_failures(self, tmp_path):
+        """Test that dry-run reports all failures, not stopping at first."""
+        sys.path.insert(0, str(__file__).rsplit('/tests/', 1)[0])
+        from v_ralph import run_dry_run_validation
+
+        # Create PRD without verification commands (will fail git check too)
+        prd_file = tmp_path / "prd.json"
+        prd_file.write_text('{"project": "Test"}')
+
+        # Should return 1 for failures
+        exit_code = run_dry_run_validation(str(prd_file))
+        assert exit_code == 1
+
+    def test_dry_run_cmd_run_integration(self, tmp_path):
+        """Test that cmd_run with dry_run=True calls validation."""
+        sys.path.insert(0, str(__file__).rsplit('/tests/', 1)[0])
+        from v_ralph import cmd_run
+        import subprocess
+
+        # Create git repo
+        subprocess.run(['git', 'init'], cwd=str(tmp_path), capture_output=True)
+
+        # Create valid PRD
+        prd_file = tmp_path / "prd.json"
+        prd_file.write_text(json.dumps({
+            "project": "Test",
+            "verificationCommands": {
+                "typecheck": "npm run build",
+                "test": "npm test"
+            },
+            "userStories": []
+        }))
+
+        args = argparse.Namespace(
+            prd=str(prd_file),
+            dry_run=True,
+            story=None,
+            max_retries=3,
+            verbose=False,
+            debug=False
+        )
+        exit_code = cmd_run(args)
+        assert exit_code == 0

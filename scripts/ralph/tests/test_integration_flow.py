@@ -153,6 +153,8 @@ class TestCompleteFlow:
         """Test that run command with dry-run validates without executing."""
         from v_ralph import cmd_run
 
+        # Initialize git repo for dry-run validation
+        init_test_git_repo(tmp_path)
         prd_file = create_test_prd(tmp_path)
 
         args = argparse.Namespace(

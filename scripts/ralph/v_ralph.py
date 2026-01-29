@@ -8,11 +8,12 @@ defined in PRD (Product Requirements Document) files.
 import argparse
 import json
 import os
+import subprocess
 import sys
 import time
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Dict
+from typing import Any, Dict, List, Tuple
 
 from shared.console import success, error, warning, info, header, progress_bar, debug, summary_box
 from shared.errors import PRDNotFoundError, StoryNotFoundError, RalphError
@@ -224,6 +225,246 @@ def display_error(err: RalphError) -> None:
         info(f"Suggestion: {err.suggestion}")
 
 
+@dataclass
+class ValidationCheck:
+    """Result of a single validation check.
+
+    Attributes:
+        name: Short name of the check
+        passed: Whether the check passed
+        message: Detailed message about the result
+    """
+    name: str
+    passed: bool
+    message: str
+
+
+def check_prd_exists(prd_path: str) -> ValidationCheck:
+    """Check if PRD file exists.
+
+    Args:
+        prd_path: Path to the PRD file
+
+    Returns:
+        ValidationCheck with result
+    """
+    exists = os.path.isfile(prd_path)
+    if exists:
+        return ValidationCheck(
+            name="PRD file exists",
+            passed=True,
+            message=f"Found PRD at {prd_path}"
+        )
+    return ValidationCheck(
+        name="PRD file exists",
+        passed=False,
+        message=f"PRD file not found at {prd_path}"
+    )
+
+
+def check_prd_valid_json(prd_path: str) -> Tuple[ValidationCheck, Dict[str, Any] | None]:
+    """Check if PRD file contains valid JSON.
+
+    Args:
+        prd_path: Path to the PRD file
+
+    Returns:
+        Tuple of (ValidationCheck with result, parsed PRD data or None)
+    """
+    if not os.path.isfile(prd_path):
+        return ValidationCheck(
+            name="PRD is valid JSON",
+            passed=False,
+            message="Cannot check JSON - file does not exist"
+        ), None
+
+    try:
+        with open(prd_path, 'r') as f:
+            prd_data = json.load(f)
+        return ValidationCheck(
+            name="PRD is valid JSON",
+            passed=True,
+            message="PRD contains valid JSON"
+        ), prd_data
+    except json.JSONDecodeError as e:
+        return ValidationCheck(
+            name="PRD is valid JSON",
+            passed=False,
+            message=f"Invalid JSON: {e}"
+        ), None
+    except Exception as e:
+        return ValidationCheck(
+            name="PRD is valid JSON",
+            passed=False,
+            message=f"Error reading file: {e}"
+        ), None
+
+
+def check_git_repo_exists(prd_path: str) -> ValidationCheck:
+    """Check if a git repository exists in the PRD directory or parent.
+
+    Args:
+        prd_path: Path to the PRD file (used to determine working directory)
+
+    Returns:
+        ValidationCheck with result
+    """
+    # Get directory containing the PRD
+    prd_dir = os.path.dirname(os.path.abspath(prd_path)) or '.'
+
+    try:
+        result = subprocess.run(
+            ['git', 'rev-parse', '--git-dir'],
+            cwd=prd_dir,
+            capture_output=True,
+            text=True
+        )
+        if result.returncode == 0:
+            return ValidationCheck(
+                name="Git repository exists",
+                passed=True,
+                message="Git repository found"
+            )
+        return ValidationCheck(
+            name="Git repository exists",
+            passed=False,
+            message="Not a git repository (or any parent)"
+        )
+    except FileNotFoundError:
+        return ValidationCheck(
+            name="Git repository exists",
+            passed=False,
+            message="Git command not found"
+        )
+    except Exception as e:
+        return ValidationCheck(
+            name="Git repository exists",
+            passed=False,
+            message=f"Error checking git: {e}"
+        )
+
+
+def check_verification_commands(prd_data: Dict[str, Any] | None) -> ValidationCheck:
+    """Check if verification commands are set in the PRD.
+
+    Args:
+        prd_data: Parsed PRD data dictionary, or None if PRD couldn't be parsed
+
+    Returns:
+        ValidationCheck with result
+    """
+    if prd_data is None:
+        return ValidationCheck(
+            name="Verification commands set",
+            passed=False,
+            message="Cannot check - PRD not loaded"
+        )
+
+    verification = prd_data.get('verificationCommands', {})
+    if not verification:
+        return ValidationCheck(
+            name="Verification commands set",
+            passed=False,
+            message="No verificationCommands object in PRD"
+        )
+
+    # Check for common verification commands
+    expected = ['typecheck', 'test']
+    found = [cmd for cmd in expected if cmd in verification]
+    missing = [cmd for cmd in expected if cmd not in verification]
+
+    if missing:
+        return ValidationCheck(
+            name="Verification commands set",
+            passed=False,
+            message=f"Missing verification commands: {', '.join(missing)}"
+        )
+
+    return ValidationCheck(
+        name="Verification commands set",
+        passed=True,
+        message=f"Found commands: {', '.join(found)}"
+    )
+
+
+def display_validation_check(check: ValidationCheck) -> None:
+    """Display a validation check result with checkmark or X.
+
+    Args:
+        check: The validation check to display
+    """
+    try:
+        from shared.console import RICH_AVAILABLE, _get_console
+        if RICH_AVAILABLE:
+            console = _get_console()
+            if check.passed:
+                console.print(f"  [green]✓[/green] {check.name}: {check.message}")
+            else:
+                console.print(f"  [red]✗[/red] {check.name}: {check.message}")
+            return
+    except Exception:
+        pass
+
+    # Plain text fallback
+    mark = "[OK]" if check.passed else "[FAIL]"
+    info(f"  {mark} {check.name}: {check.message}")
+
+
+def run_dry_run_validation(prd_path: str) -> int:
+    """Run all dry-run validation checks.
+
+    Performs comprehensive validation:
+    - PRD file exists
+    - PRD is valid JSON
+    - Git repository exists
+    - Verification commands are set
+
+    Args:
+        prd_path: Path to the PRD file
+
+    Returns:
+        Exit code: 0 if all checks pass, 1 if any fail
+    """
+    header("Dry-run validation")
+    info("")
+
+    checks: List[ValidationCheck] = []
+    prd_data: Dict[str, Any] | None = None
+
+    # Check 1: PRD file exists
+    check1 = check_prd_exists(prd_path)
+    checks.append(check1)
+    display_validation_check(check1)
+
+    # Check 2: PRD is valid JSON
+    check2, prd_data = check_prd_valid_json(prd_path)
+    checks.append(check2)
+    display_validation_check(check2)
+
+    # Check 3: Git repository exists
+    check3 = check_git_repo_exists(prd_path)
+    checks.append(check3)
+    display_validation_check(check3)
+
+    # Check 4: Verification commands are set
+    check4 = check_verification_commands(prd_data)
+    checks.append(check4)
+    display_validation_check(check4)
+
+    # Display summary
+    info("")
+    passed_count = sum(1 for c in checks if c.passed)
+    total_count = len(checks)
+
+    if passed_count == total_count:
+        success(f"All {total_count} checks passed")
+        return 0
+    else:
+        failed_count = total_count - passed_count
+        error(f"{failed_count} of {total_count} checks failed")
+        return 1
+
+
 def load_prd(prd_path: str) -> Dict[str, Any]:
     """Load and parse a PRD JSON file.
 
@@ -397,6 +638,11 @@ def cmd_run(args: argparse.Namespace) -> int:
         Exit code (0 for success, 1 for error, 2 for escalation)
     """
     prd_path = args.prd
+
+    # Dry-run mode performs comprehensive validation and exits
+    if args.dry_run:
+        return run_dry_run_validation(prd_path)
+
     try:
         prd = load_prd(prd_path)
     except PRDNotFoundError as e:
@@ -406,19 +652,6 @@ def cmd_run(args: argparse.Namespace) -> int:
         error(f"Error: {e}")
         info("Suggestion: Check your PRD file for valid JSON syntax. Use a JSON validator tool.")
         return 1
-
-    if args.dry_run:
-        header("Dry-run mode: validating configuration...")
-        info(f"  PRD file: {prd_path}")
-        info(f"  Project: {prd.get('project', 'Unknown')}")
-        info(f"  Branch: {prd.get('branchName', 'N/A')}")
-
-        stories = prd.get('userStories', [])
-        pending = [s for s in stories if not s.get('passes', False)]
-        info(f"  Pending stories: {len(pending)}")
-
-        success("Dry-run validation complete")
-        return 0
 
     # Find story to run
     stories = prd.get('userStories', [])
