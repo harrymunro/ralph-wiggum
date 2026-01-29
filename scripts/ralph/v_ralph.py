@@ -19,7 +19,7 @@ from shared.console import (
     success, error, warning, info, header, progress_bar, debug, summary_box,
     feedback_panel, escalate_panel, retry_history_panel
 )
-from shared.errors import PRDNotFoundError, StoryNotFoundError, RalphError
+from shared.errors import PRDNotFoundError, StoryNotFoundError, RalphError, GitNotInitializedError
 
 
 @dataclass
@@ -562,6 +562,238 @@ def check_verification_commands(prd_data: Dict[str, Any] | None) -> ValidationCh
         passed=True,
         message=f"Found commands: {', '.join(found)}"
     )
+
+
+@dataclass
+class GitSafetyCheck:
+    """Result of a git safety check.
+
+    Attributes:
+        check_type: Type of check (uncommitted_changes, unpushed_commits, detached_head)
+        is_unsafe: Whether the state is unsafe (True = warning needed)
+        message: Detailed message describing the state
+    """
+    check_type: str
+    is_unsafe: bool
+    message: str
+
+
+def check_git_uncommitted_changes(working_dir: str) -> GitSafetyCheck:
+    """Check if there are uncommitted changes in the working directory.
+
+    Args:
+        working_dir: Path to the working directory
+
+    Returns:
+        GitSafetyCheck with result
+    """
+    try:
+        result = subprocess.run(
+            ['git', 'status', '--porcelain'],
+            cwd=working_dir,
+            capture_output=True,
+            text=True
+        )
+        if result.returncode != 0:
+            return GitSafetyCheck(
+                check_type="uncommitted_changes",
+                is_unsafe=True,
+                message="Could not check git status"
+            )
+
+        # If there's any output, there are uncommitted changes
+        if result.stdout.strip():
+            return GitSafetyCheck(
+                check_type="uncommitted_changes",
+                is_unsafe=True,
+                message="Uncommitted changes detected in working directory"
+            )
+
+        return GitSafetyCheck(
+            check_type="uncommitted_changes",
+            is_unsafe=False,
+            message="Working directory is clean"
+        )
+    except FileNotFoundError:
+        return GitSafetyCheck(
+            check_type="uncommitted_changes",
+            is_unsafe=True,
+            message="Git command not found"
+        )
+    except Exception as e:
+        return GitSafetyCheck(
+            check_type="uncommitted_changes",
+            is_unsafe=True,
+            message=f"Error checking uncommitted changes: {e}"
+        )
+
+
+def check_git_unpushed_commits(working_dir: str) -> GitSafetyCheck:
+    """Check if there are unpushed commits on the current branch.
+
+    Args:
+        working_dir: Path to the working directory
+
+    Returns:
+        GitSafetyCheck with result
+    """
+    try:
+        # First check if there's a remote tracking branch
+        result = subprocess.run(
+            ['git', 'rev-parse', '--abbrev-ref', '--symbolic-full-name', '@{u}'],
+            cwd=working_dir,
+            capture_output=True,
+            text=True
+        )
+        if result.returncode != 0:
+            # No upstream branch configured - not unsafe, just informational
+            return GitSafetyCheck(
+                check_type="unpushed_commits",
+                is_unsafe=False,
+                message="No upstream branch configured"
+            )
+
+        # Check for unpushed commits
+        result = subprocess.run(
+            ['git', 'log', '@{u}..HEAD', '--oneline'],
+            cwd=working_dir,
+            capture_output=True,
+            text=True
+        )
+        if result.returncode != 0:
+            return GitSafetyCheck(
+                check_type="unpushed_commits",
+                is_unsafe=True,
+                message="Could not check for unpushed commits"
+            )
+
+        # If there's any output, there are unpushed commits
+        if result.stdout.strip():
+            commit_count = len(result.stdout.strip().split('\n'))
+            return GitSafetyCheck(
+                check_type="unpushed_commits",
+                is_unsafe=True,
+                message=f"{commit_count} unpushed commit(s) on current branch"
+            )
+
+        return GitSafetyCheck(
+            check_type="unpushed_commits",
+            is_unsafe=False,
+            message="All commits are pushed"
+        )
+    except FileNotFoundError:
+        return GitSafetyCheck(
+            check_type="unpushed_commits",
+            is_unsafe=True,
+            message="Git command not found"
+        )
+    except Exception as e:
+        return GitSafetyCheck(
+            check_type="unpushed_commits",
+            is_unsafe=True,
+            message=f"Error checking unpushed commits: {e}"
+        )
+
+
+def check_git_detached_head(working_dir: str) -> GitSafetyCheck:
+    """Check if the repository is in a detached HEAD state.
+
+    Args:
+        working_dir: Path to the working directory
+
+    Returns:
+        GitSafetyCheck with result
+    """
+    try:
+        result = subprocess.run(
+            ['git', 'symbolic-ref', 'HEAD'],
+            cwd=working_dir,
+            capture_output=True,
+            text=True
+        )
+        if result.returncode != 0:
+            # Could be detached HEAD or other error
+            # Check if we're actually on a valid ref
+            check_ref = subprocess.run(
+                ['git', 'rev-parse', 'HEAD'],
+                cwd=working_dir,
+                capture_output=True,
+                text=True
+            )
+            if check_ref.returncode == 0:
+                return GitSafetyCheck(
+                    check_type="detached_head",
+                    is_unsafe=True,
+                    message="Repository is in detached HEAD state"
+                )
+            return GitSafetyCheck(
+                check_type="detached_head",
+                is_unsafe=True,
+                message="Could not determine HEAD state"
+            )
+
+        return GitSafetyCheck(
+            check_type="detached_head",
+            is_unsafe=False,
+            message="On a branch (not detached)"
+        )
+    except FileNotFoundError:
+        return GitSafetyCheck(
+            check_type="detached_head",
+            is_unsafe=True,
+            message="Git command not found"
+        )
+    except Exception as e:
+        return GitSafetyCheck(
+            check_type="detached_head",
+            is_unsafe=True,
+            message=f"Error checking HEAD state: {e}"
+        )
+
+
+def run_git_safety_checks(working_dir: str) -> Tuple[List[GitSafetyCheck], bool]:
+    """Run all git safety checks and return results.
+
+    Args:
+        working_dir: Path to the working directory
+
+    Returns:
+        Tuple of (list of check results, overall_unsafe flag)
+    """
+    checks = [
+        check_git_uncommitted_changes(working_dir),
+        check_git_unpushed_commits(working_dir),
+        check_git_detached_head(working_dir),
+    ]
+
+    overall_unsafe = any(check.is_unsafe for check in checks)
+    return checks, overall_unsafe
+
+
+def display_git_safety_warning(checks: List[GitSafetyCheck]) -> None:
+    """Display warnings for unsafe git states.
+
+    Args:
+        checks: List of GitSafetyCheck results
+    """
+    unsafe_checks = [c for c in checks if c.is_unsafe]
+    if not unsafe_checks:
+        return
+
+    warning("")
+    warning("Git Safety Warning:")
+    for check in unsafe_checks:
+        warning(f"  • {check.message}")
+    info("")
+    info("Use --force to proceed anyway, or resolve the issues first.")
+
+
+def display_post_execution_reminder() -> None:
+    """Display a reminder to review commits before pushing."""
+    info("")
+    info("Reminder: Review the commits made by Ralph before pushing:")
+    info("  git log --oneline -5")
+    info("  git diff HEAD~1")
 
 
 def display_validation_check(check: ValidationCheck) -> None:
@@ -1308,6 +1540,15 @@ def cmd_run(args: argparse.Namespace) -> int:
         info("Suggestion: Check your PRD file for valid JSON syntax. Use a JSON validator tool.")
         return 1
 
+    # Run git safety checks before execution
+    force_mode = getattr(args, 'force', False)
+    prd_dir = os.path.dirname(os.path.abspath(prd_path)) or '.'
+
+    safety_checks, is_unsafe = run_git_safety_checks(prd_dir)
+    if is_unsafe and not force_mode:
+        display_git_safety_warning(safety_checks)
+        return 1
+
     # Find story to run
     stories = prd.get('userStories', [])
     target_story = None
@@ -1421,6 +1662,9 @@ def cmd_run(args: argparse.Namespace) -> int:
         info("")
         summary.display()
 
+    # Display post-execution reminder to review commits before pushing
+    display_post_execution_reminder()
+
     return 0
 
 
@@ -1501,6 +1745,11 @@ def main() -> int:
         '--timings',
         action='store_true',
         help='Show only timing information without full verbose output'
+    )
+    run_parser.add_argument(
+        '--force',
+        action='store_true',
+        help='Proceed even if git safety checks detect unsafe state'
     )
     run_parser.set_defaults(func=cmd_run)
 

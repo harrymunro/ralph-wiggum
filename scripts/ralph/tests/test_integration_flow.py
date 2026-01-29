@@ -224,7 +224,12 @@ class TestCompleteFlow:
             story=None,
             max_retries=3,
             verbose=False,
-            debug=False
+            debug=False,
+            interactive=False,
+            reset_attempts=False,
+            skip_validation=False,
+            timings=False,
+            force=True  # Force flag to bypass git safety checks
         )
 
         exit_code = cmd_run(args)

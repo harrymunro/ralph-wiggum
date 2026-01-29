@@ -576,7 +576,12 @@ class TestExitCodes:
             story=None,
             max_retries=3,
             verbose=False,
-            debug=False
+            debug=False,
+            interactive=False,
+            reset_attempts=False,
+            skip_validation=False,
+            timings=False,
+            force=True  # Force flag to bypass git safety checks
         )
         exit_code = cmd_run(args)
         assert exit_code == 0
@@ -2014,7 +2019,11 @@ class TestInteractiveModeIntegration:
             max_retries=3,
             verbose=False,
             debug=False,
-            interactive=True
+            interactive=True,
+            reset_attempts=False,
+            skip_validation=False,
+            timings=False,
+            force=True  # Force flag to bypass git safety checks
         )
 
         with patch('v_ralph.success') as mock_success:
@@ -2043,7 +2052,11 @@ class TestInteractiveModeIntegration:
             max_retries=3,
             verbose=False,
             debug=False,
-            interactive=True
+            interactive=True,
+            reset_attempts=False,
+            skip_validation=False,
+            timings=False,
+            force=True  # Force flag to bypass git safety checks
         )
 
         with patch('v_ralph.display_interactive_stories'):
@@ -2144,16 +2157,19 @@ class TestResetAttemptsFlag:
             debug=False,
             interactive=False,
             reset_attempts=True,
-            skip_validation=False
+            skip_validation=False,
+            timings=False,
+            force=True  # Force flag to bypass git safety checks
         )
 
         # Should not return error for missing --story
         with patch('v_ralph.header'):
             with patch('v_ralph.info'):
                 with patch('v_ralph.ExecutionSummary'):
-                    exit_code = cmd_run(args)
-                    # Should succeed (0) not error (1) for missing story flag
-                    assert exit_code == 0
+                    with patch('v_ralph.display_post_execution_reminder'):
+                        exit_code = cmd_run(args)
+                        # Should succeed (0) not error (1) for missing story flag
+                        assert exit_code == 0
 
 
 class TestSkipValidationFlag:
@@ -2247,16 +2263,19 @@ class TestSkipValidationFlag:
             debug=False,
             interactive=False,
             reset_attempts=False,
-            skip_validation=True
+            skip_validation=True,
+            timings=False,
+            force=True  # Force flag to bypass git safety checks
         )
 
         # Should not return error for missing --story
         with patch('v_ralph.header'):
             with patch('v_ralph.info'):
                 with patch('v_ralph.ExecutionSummary'):
-                    exit_code = cmd_run(args)
-                    # Should succeed (0) not error (1) for missing story flag
-                    assert exit_code == 0
+                    with patch('v_ralph.display_post_execution_reminder'):
+                        exit_code = cmd_run(args)
+                        # Should succeed (0) not error (1) for missing story flag
+                        assert exit_code == 0
 
 
 class TestRetryControlFlagsCombined:
@@ -2327,15 +2346,18 @@ class TestRetryControlFlagsCombined:
             debug=False,
             interactive=False,
             reset_attempts=True,
-            skip_validation=True
+            skip_validation=True,
+            timings=False,
+            force=True  # Force flag to bypass git safety checks
         )
 
         with patch('v_ralph.header'):
             with patch('v_ralph.info'):
                 with patch('v_ralph.ExecutionSummary'):
-                    exit_code = cmd_run(args)
-                    # Should not fail validation
-                    assert exit_code == 0
+                    with patch('v_ralph.display_post_execution_reminder'):
+                        exit_code = cmd_run(args)
+                        # Should not fail validation
+                        assert exit_code == 0
 
 
 class TestPhaseTimings:
@@ -2576,3 +2598,414 @@ class TestDisplayTimingsOnly:
                 display_timings_only(timings, 3661.0)  # 1h 1m 1s
                 calls = [str(c) for c in mock_info.call_args_list]
                 assert any("1h" in c for c in calls)
+
+
+class TestGitSafetyCheckDataclass:
+    """Tests for the GitSafetyCheck dataclass."""
+
+    def test_git_safety_check_creation(self):
+        """Test that GitSafetyCheck can be created with all fields."""
+        sys.path.insert(0, str(__file__).rsplit('/tests/', 1)[0])
+        from v_ralph import GitSafetyCheck
+
+        check = GitSafetyCheck(
+            check_type="uncommitted_changes",
+            is_unsafe=True,
+            message="Uncommitted changes detected"
+        )
+        assert check.check_type == "uncommitted_changes"
+        assert check.is_unsafe is True
+        assert check.message == "Uncommitted changes detected"
+
+    def test_git_safety_check_safe_state(self):
+        """Test GitSafetyCheck for a safe state."""
+        sys.path.insert(0, str(__file__).rsplit('/tests/', 1)[0])
+        from v_ralph import GitSafetyCheck
+
+        check = GitSafetyCheck(
+            check_type="detached_head",
+            is_unsafe=False,
+            message="On a branch (not detached)"
+        )
+        assert check.is_unsafe is False
+
+
+class TestCheckGitUncommittedChanges:
+    """Tests for check_git_uncommitted_changes function."""
+
+    def test_uncommitted_changes_clean(self, tmp_path):
+        """Test detection of clean working directory."""
+        sys.path.insert(0, str(__file__).rsplit('/tests/', 1)[0])
+        from v_ralph import check_git_uncommitted_changes
+
+        # Initialize a git repo with no changes
+        import subprocess
+        subprocess.run(['git', 'init'], cwd=tmp_path, capture_output=True)
+        subprocess.run(['git', 'config', 'user.email', 'test@test.com'], cwd=tmp_path, capture_output=True)
+        subprocess.run(['git', 'config', 'user.name', 'Test'], cwd=tmp_path, capture_output=True)
+
+        result = check_git_uncommitted_changes(str(tmp_path))
+        assert result.check_type == "uncommitted_changes"
+        assert result.is_unsafe is False
+        assert "clean" in result.message.lower()
+
+    def test_uncommitted_changes_dirty(self, tmp_path):
+        """Test detection of uncommitted changes."""
+        sys.path.insert(0, str(__file__).rsplit('/tests/', 1)[0])
+        from v_ralph import check_git_uncommitted_changes
+
+        # Initialize a git repo and create an uncommitted file
+        import subprocess
+        subprocess.run(['git', 'init'], cwd=tmp_path, capture_output=True)
+        (tmp_path / "test.txt").write_text("test content")
+
+        result = check_git_uncommitted_changes(str(tmp_path))
+        assert result.check_type == "uncommitted_changes"
+        assert result.is_unsafe is True
+        assert "uncommitted" in result.message.lower()
+
+    def test_uncommitted_changes_not_a_repo(self, tmp_path):
+        """Test behavior when not in a git repository."""
+        sys.path.insert(0, str(__file__).rsplit('/tests/', 1)[0])
+        from v_ralph import check_git_uncommitted_changes
+
+        result = check_git_uncommitted_changes(str(tmp_path))
+        assert result.check_type == "uncommitted_changes"
+        assert result.is_unsafe is True
+
+
+class TestCheckGitUnpushedCommits:
+    """Tests for check_git_unpushed_commits function."""
+
+    def test_unpushed_commits_no_upstream(self, tmp_path):
+        """Test when no upstream branch is configured."""
+        sys.path.insert(0, str(__file__).rsplit('/tests/', 1)[0])
+        from v_ralph import check_git_unpushed_commits
+
+        # Initialize a git repo without remote
+        import subprocess
+        subprocess.run(['git', 'init'], cwd=tmp_path, capture_output=True)
+        subprocess.run(['git', 'config', 'user.email', 'test@test.com'], cwd=tmp_path, capture_output=True)
+        subprocess.run(['git', 'config', 'user.name', 'Test'], cwd=tmp_path, capture_output=True)
+        (tmp_path / "test.txt").write_text("test")
+        subprocess.run(['git', 'add', '.'], cwd=tmp_path, capture_output=True)
+        subprocess.run(['git', 'commit', '-m', 'initial'], cwd=tmp_path, capture_output=True)
+
+        result = check_git_unpushed_commits(str(tmp_path))
+        assert result.check_type == "unpushed_commits"
+        # No upstream is not considered unsafe
+        assert result.is_unsafe is False
+        assert "upstream" in result.message.lower()
+
+    def test_unpushed_commits_not_a_repo(self, tmp_path):
+        """Test behavior when not in a git repository."""
+        sys.path.insert(0, str(__file__).rsplit('/tests/', 1)[0])
+        from v_ralph import check_git_unpushed_commits
+
+        result = check_git_unpushed_commits(str(tmp_path))
+        assert result.check_type == "unpushed_commits"
+        # When not a repo, rev-parse fails which means no upstream - treated as safe
+        assert result.is_unsafe is False
+
+
+class TestCheckGitDetachedHead:
+    """Tests for check_git_detached_head function."""
+
+    def test_detached_head_on_branch(self, tmp_path):
+        """Test when on a regular branch (not detached)."""
+        sys.path.insert(0, str(__file__).rsplit('/tests/', 1)[0])
+        from v_ralph import check_git_detached_head
+
+        # Initialize a git repo on main branch
+        import subprocess
+        subprocess.run(['git', 'init'], cwd=tmp_path, capture_output=True)
+        subprocess.run(['git', 'config', 'user.email', 'test@test.com'], cwd=tmp_path, capture_output=True)
+        subprocess.run(['git', 'config', 'user.name', 'Test'], cwd=tmp_path, capture_output=True)
+        (tmp_path / "test.txt").write_text("test")
+        subprocess.run(['git', 'add', '.'], cwd=tmp_path, capture_output=True)
+        subprocess.run(['git', 'commit', '-m', 'initial'], cwd=tmp_path, capture_output=True)
+
+        result = check_git_detached_head(str(tmp_path))
+        assert result.check_type == "detached_head"
+        assert result.is_unsafe is False
+        assert "branch" in result.message.lower()
+
+    def test_detached_head_actual(self, tmp_path):
+        """Test when in detached HEAD state."""
+        sys.path.insert(0, str(__file__).rsplit('/tests/', 1)[0])
+        from v_ralph import check_git_detached_head
+
+        # Initialize a git repo and detach HEAD
+        import subprocess
+        subprocess.run(['git', 'init'], cwd=tmp_path, capture_output=True)
+        subprocess.run(['git', 'config', 'user.email', 'test@test.com'], cwd=tmp_path, capture_output=True)
+        subprocess.run(['git', 'config', 'user.name', 'Test'], cwd=tmp_path, capture_output=True)
+        (tmp_path / "test.txt").write_text("test")
+        subprocess.run(['git', 'add', '.'], cwd=tmp_path, capture_output=True)
+        subprocess.run(['git', 'commit', '-m', 'initial'], cwd=tmp_path, capture_output=True)
+        # Detach HEAD
+        subprocess.run(['git', 'checkout', '--detach', 'HEAD'], cwd=tmp_path, capture_output=True)
+
+        result = check_git_detached_head(str(tmp_path))
+        assert result.check_type == "detached_head"
+        assert result.is_unsafe is True
+        assert "detached" in result.message.lower()
+
+    def test_detached_head_not_a_repo(self, tmp_path):
+        """Test behavior when not in a git repository."""
+        sys.path.insert(0, str(__file__).rsplit('/tests/', 1)[0])
+        from v_ralph import check_git_detached_head
+
+        result = check_git_detached_head(str(tmp_path))
+        assert result.check_type == "detached_head"
+        assert result.is_unsafe is True
+
+
+class TestRunGitSafetyChecks:
+    """Tests for run_git_safety_checks function."""
+
+    def test_run_safety_checks_all_safe(self, tmp_path):
+        """Test when all safety checks pass."""
+        sys.path.insert(0, str(__file__).rsplit('/tests/', 1)[0])
+        from v_ralph import run_git_safety_checks
+
+        # Initialize a clean git repo
+        import subprocess
+        subprocess.run(['git', 'init'], cwd=tmp_path, capture_output=True)
+        subprocess.run(['git', 'config', 'user.email', 'test@test.com'], cwd=tmp_path, capture_output=True)
+        subprocess.run(['git', 'config', 'user.name', 'Test'], cwd=tmp_path, capture_output=True)
+        (tmp_path / "test.txt").write_text("test")
+        subprocess.run(['git', 'add', '.'], cwd=tmp_path, capture_output=True)
+        subprocess.run(['git', 'commit', '-m', 'initial'], cwd=tmp_path, capture_output=True)
+
+        checks, is_unsafe = run_git_safety_checks(str(tmp_path))
+        assert len(checks) == 3
+        assert is_unsafe is False
+
+    def test_run_safety_checks_some_unsafe(self, tmp_path):
+        """Test when some safety checks fail."""
+        sys.path.insert(0, str(__file__).rsplit('/tests/', 1)[0])
+        from v_ralph import run_git_safety_checks
+
+        # Initialize a git repo with uncommitted changes
+        import subprocess
+        subprocess.run(['git', 'init'], cwd=tmp_path, capture_output=True)
+        (tmp_path / "test.txt").write_text("uncommitted content")
+
+        checks, is_unsafe = run_git_safety_checks(str(tmp_path))
+        assert len(checks) == 3
+        assert is_unsafe is True
+
+    def test_run_safety_checks_returns_all_check_types(self, tmp_path):
+        """Test that all check types are returned."""
+        sys.path.insert(0, str(__file__).rsplit('/tests/', 1)[0])
+        from v_ralph import run_git_safety_checks
+
+        import subprocess
+        subprocess.run(['git', 'init'], cwd=tmp_path, capture_output=True)
+
+        checks, _ = run_git_safety_checks(str(tmp_path))
+        check_types = [c.check_type for c in checks]
+        assert "uncommitted_changes" in check_types
+        assert "unpushed_commits" in check_types
+        assert "detached_head" in check_types
+
+
+class TestDisplayGitSafetyWarning:
+    """Tests for display_git_safety_warning function."""
+
+    def test_display_warning_shows_unsafe_checks(self):
+        """Test that warnings are displayed for unsafe checks."""
+        sys.path.insert(0, str(__file__).rsplit('/tests/', 1)[0])
+        from v_ralph import display_git_safety_warning, GitSafetyCheck
+
+        checks = [
+            GitSafetyCheck("uncommitted_changes", True, "Uncommitted changes detected"),
+            GitSafetyCheck("detached_head", False, "On a branch"),
+        ]
+
+        with patch('v_ralph.warning') as mock_warning:
+            with patch('v_ralph.info'):
+                display_git_safety_warning(checks)
+                # Should only show warnings for unsafe checks
+                assert mock_warning.call_count >= 2
+                call_args = [str(c) for c in mock_warning.call_args_list]
+                assert any("Uncommitted" in c for c in call_args)
+
+    def test_display_warning_no_unsafe_checks(self):
+        """Test that no warnings shown when all checks are safe."""
+        sys.path.insert(0, str(__file__).rsplit('/tests/', 1)[0])
+        from v_ralph import display_git_safety_warning, GitSafetyCheck
+
+        checks = [
+            GitSafetyCheck("uncommitted_changes", False, "Clean"),
+            GitSafetyCheck("detached_head", False, "On a branch"),
+        ]
+
+        with patch('v_ralph.warning') as mock_warning:
+            with patch('v_ralph.info'):
+                display_git_safety_warning(checks)
+                mock_warning.assert_not_called()
+
+    def test_display_warning_shows_force_suggestion(self):
+        """Test that --force suggestion is shown."""
+        sys.path.insert(0, str(__file__).rsplit('/tests/', 1)[0])
+        from v_ralph import display_git_safety_warning, GitSafetyCheck
+
+        checks = [
+            GitSafetyCheck("uncommitted_changes", True, "Uncommitted changes"),
+        ]
+
+        with patch('v_ralph.warning'):
+            with patch('v_ralph.info') as mock_info:
+                display_git_safety_warning(checks)
+                calls = [str(c) for c in mock_info.call_args_list]
+                assert any("--force" in c for c in calls)
+
+
+class TestDisplayPostExecutionReminder:
+    """Tests for display_post_execution_reminder function."""
+
+    def test_reminder_shows_git_commands(self):
+        """Test that reminder shows git log and diff commands."""
+        sys.path.insert(0, str(__file__).rsplit('/tests/', 1)[0])
+        from v_ralph import display_post_execution_reminder
+
+        with patch('v_ralph.info') as mock_info:
+            display_post_execution_reminder()
+            calls = [str(c) for c in mock_info.call_args_list]
+            assert any("git log" in c for c in calls)
+            assert any("git diff" in c for c in calls)
+
+    def test_reminder_mentions_review(self):
+        """Test that reminder mentions reviewing commits."""
+        sys.path.insert(0, str(__file__).rsplit('/tests/', 1)[0])
+        from v_ralph import display_post_execution_reminder
+
+        with patch('v_ralph.info') as mock_info:
+            display_post_execution_reminder()
+            calls = [str(c) for c in mock_info.call_args_list]
+            assert any("review" in c.lower() or "Review" in c for c in calls)
+
+
+class TestForceFlag:
+    """Tests for the --force flag."""
+
+    def test_force_flag_parsed(self):
+        """Test that --force flag is recognized by the parser."""
+        sys.path.insert(0, str(__file__).rsplit('/tests/', 1)[0])
+        from v_ralph import main
+
+        with patch('sys.argv', ['v_ralph', 'run', '--force', '--dry-run']):
+            with patch('v_ralph.cmd_run') as mock_run:
+                mock_run.return_value = 0
+                main()
+                args = mock_run.call_args[0][0]
+                assert args.force is True
+
+    def test_force_flag_default_is_false(self):
+        """Test that force flag defaults to False when not provided."""
+        sys.path.insert(0, str(__file__).rsplit('/tests/', 1)[0])
+        from v_ralph import main
+
+        with patch('sys.argv', ['v_ralph', 'run', '--dry-run']):
+            with patch('v_ralph.cmd_run') as mock_run:
+                mock_run.return_value = 0
+                main()
+                args = mock_run.call_args[0][0]
+                assert args.force is False
+
+    def test_force_flag_in_help_output(self):
+        """Test that --force appears in run --help output."""
+        sys.path.insert(0, str(__file__).rsplit('/tests/', 1)[0])
+        from v_ralph import main
+
+        with patch('sys.argv', ['v_ralph', 'run', '--help']):
+            with pytest.raises(SystemExit) as exc_info:
+                with patch('sys.stdout.write'):
+                    main()
+            # Help exits with code 0
+            assert exc_info.value.code == 0
+
+
+class TestGitSafetyIntegration:
+    """Integration tests for git safety checks in cmd_run."""
+
+    def test_cmd_run_blocked_by_unsafe_state(self, tmp_path):
+        """Test that cmd_run is blocked when git state is unsafe."""
+        sys.path.insert(0, str(__file__).rsplit('/tests/', 1)[0])
+        from v_ralph import cmd_run
+
+        # Create a PRD file
+        prd_path = tmp_path / "prd.json"
+        prd_data = {
+            "project": "Test",
+            "branchName": "test",
+            "userStories": [{"id": "US-001", "title": "Test", "passes": False, "priority": 1}]
+        }
+        prd_path.write_text(json.dumps(prd_data))
+
+        # Initialize git repo with uncommitted changes
+        import subprocess
+        subprocess.run(['git', 'init'], cwd=tmp_path, capture_output=True)
+        (tmp_path / "dirty.txt").write_text("uncommitted")
+
+        args = argparse.Namespace(
+            prd=str(prd_path),
+            story=None,
+            dry_run=False,
+            max_retries=3,
+            verbose=False,
+            debug=False,
+            interactive=False,
+            reset_attempts=False,
+            skip_validation=False,
+            timings=False,
+            force=False
+        )
+
+        with patch('v_ralph.display_git_safety_warning'):
+            result = cmd_run(args)
+            # Should return 1 due to unsafe git state
+            assert result == 1
+
+    def test_cmd_run_proceeds_with_force_flag(self, tmp_path):
+        """Test that cmd_run proceeds when --force is used despite unsafe state."""
+        sys.path.insert(0, str(__file__).rsplit('/tests/', 1)[0])
+        from v_ralph import cmd_run
+
+        # Create a PRD file
+        prd_path = tmp_path / "prd.json"
+        prd_data = {
+            "project": "Test",
+            "branchName": "test",
+            "userStories": [{"id": "US-001", "title": "Test", "passes": False, "priority": 1}]
+        }
+        prd_path.write_text(json.dumps(prd_data))
+
+        # Initialize git repo with uncommitted changes
+        import subprocess
+        subprocess.run(['git', 'init'], cwd=tmp_path, capture_output=True)
+        (tmp_path / "dirty.txt").write_text("uncommitted")
+
+        args = argparse.Namespace(
+            prd=str(prd_path),
+            story=None,
+            dry_run=False,
+            max_retries=3,
+            verbose=False,
+            debug=False,
+            interactive=False,
+            reset_attempts=False,
+            skip_validation=False,
+            timings=False,
+            force=True  # Force flag enabled
+        )
+
+        with patch('v_ralph.header'):
+            with patch('v_ralph.info'):
+                with patch('v_ralph.summary_box'):
+                    with patch('v_ralph.display_post_execution_reminder'):
+                        result = cmd_run(args)
+                        # Should return 0 (proceed despite unsafe state)
+                        assert result == 0
