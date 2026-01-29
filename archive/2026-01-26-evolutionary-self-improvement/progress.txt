@@ -1,0 +1,123 @@
+# Ralph Progress Log
+Started: 2026-01-26
+Branch: ralph/evolutionary-self-improvement
+
+## Codebase Patterns
+- Tests use bats framework: `make test` runs all tests
+- ralph.sh is the main loop script
+- Skills are in skills/ directory with SKILL.md files
+- CLAUDE.md contains agent instructions
+
+---
+
+## 2026-01-26 - EXP-001
+- What was implemented:
+  - Added metrics tracking to ralph.sh (iterations, completed stories, skipped stories)
+  - Added output_metrics_summary function that displays metrics at end of run
+  - Created experiments.json with baseline schema and initial measurements
+  - Created tasks/test-prd-baseline.json for future baseline testing
+  - Created test/metrics.bats with 5 new tests for metrics functionality
+- Files changed:
+  - ralph.sh (added ~70 lines for metrics tracking and summary)
+  - experiments.json (new file with baseline schema)
+  - tasks/test-prd-baseline.json (new file)
+  - test/metrics.bats (new test file)
+- **Learnings for future iterations:**
+  - Use `bc` for decimal calculations in bash (e.g., completion rate percentages)
+  - Test helpers are in test/test_helper/ - common.bash for setup, mocks.bash for mock commands
+  - Fixtures for tests are in test/fixtures/ (prd_complete.json, prd_incomplete.json)
+  - Metrics are output at both successful completion and max iterations reached
+---
+
+## 2026-01-26 - EXP-002
+- What was implemented:
+  - Created docs/experiments/TEMPLATE.md with sections: Hypothesis, Mutation, Results, Learnings, Metrics
+  - Added 'Experiment Recording' section to CLAUDE.md with instructions for recording results
+- Files changed:
+  - docs/experiments/TEMPLATE.md (new file with experiment documentation template)
+  - CLAUDE.md (added ~35 lines for Experiment Recording section)
+- **Learnings for future iterations:**
+  - docs/experiments/ directory already existed (created by previous iteration or manually)
+  - Experiment template includes metadata section for tracking status and branch
+  - CLAUDE.md Experiment Recording section provides structured workflow for before/during/after experiments
+---
+
+## 2026-01-26 - EXP-003
+- What was implemented:
+  - Added --experiment flag to ralph.sh that enables experiment mode
+  - Experiment mode automatically creates feature branch (ralph/experiment-{exp-id})
+  - Added record_experiment_results function that compares metrics to baseline
+  - Results recorded to both experiments.json and docs/experiments/{EXP-ID}.md
+  - Created test/experiment_mode.bats with 8 new tests for experiment mode
+  - Created docs/experiments/EXP-003.md documenting this experiment
+- Files changed:
+  - ralph.sh (added ~150 lines for experiment mode functionality)
+  - test/experiment_mode.bats (new file with 8 tests)
+  - docs/experiments/EXP-003.md (new file)
+- **Learnings for future iterations:**
+  - Experiment ID can be auto-generated from experiments.json or provided via --experiment EXP-XXX
+  - Branch naming convention: ralph/experiment-{exp-id} (lowercase)
+  - record_experiment_results() calculates delta_fitness as weighted average of metric improvements
+  - The `local` keyword can only be used inside functions in bash scripts
+---
+
+## 2026-01-26 - EXP-004
+- What was implemented:
+  - Added --next-experiment flag to ralph.sh that generates hypothesis for next experiment
+  - Added generate_next_hypothesis() function that analyzes experiments.json metrics
+  - Identifies lowest-performing metric by calculating gap from ideal (100% completion, 1 iteration, 100% quality)
+  - Outputs structured JSON hypothesis with: experiment_id, metric_targeted, expected_improvement, specific_change, reasoning
+  - Added 'Hypothesis Generation' section to CLAUDE.md with analysis framework
+  - Created test/hypothesis_generation.bats with 10 new tests
+- Files changed:
+  - ralph.sh (added ~115 lines for hypothesis generation)
+  - CLAUDE.md (added ~69 lines for Hypothesis Generation section)
+  - test/hypothesis_generation.bats (new file with 10 tests)
+- **Learnings for future iterations:**
+  - Tests that need isolated experiments.json must copy ralph.sh to test dir so SCRIPT_DIR is correct
+  - bc is used for decimal comparisons in gap analysis
+  - Iteration gap is scaled by 10x to make it comparable to percentage-based metrics
+  - Hypothesis generator exits immediately (exit 0) before main loop starts
+---
+
+## 2026-01-26 - EXP-005
+- What was implemented:
+  - Added check_stagnation() function that detects 3+ consecutive experiments without improvement
+  - Added update_stagnation_count() function that tracks stagnation after each experiment
+  - Added BIG_MUTATIONS array with 7 major structural change ideas
+  - Added select_big_mutation() function that picks untried mutations when stagnation detected
+  - Modified --next-experiment to select big mutation when stagnation_count >= 3
+  - Added 'Big Mutation Catalog' section to CLAUDE.md with detailed mutation descriptions
+  - Created test/stagnation_detection.bats with 12 new tests
+- Files changed:
+  - ralph.sh (added ~130 lines for stagnation detection and big mutation selection)
+  - CLAUDE.md (added ~85 lines for Big Mutation Catalog section)
+  - test/stagnation_detection.bats (new file with 12 tests)
+- **Learnings for future iterations:**
+  - experiments.json already had stagnation_count and last_improvement_at fields (from baseline setup)
+  - Big mutations are stored as pipe-delimited strings in a bash array: "ID|Name|Description"
+  - Mutation selection skips mutations that appear in previous experiment hypotheses
+  - bc -l is used for floating point comparisons (delta_fitness > 0)
+  - update_stagnation_count() is called from record_experiment_results() after experiment completes
+---
+
+## 2026-01-26 - EXP-006
+- What was implemented:
+  - Added --generations N flag to ralph.sh for autonomous multi-generation evolution
+  - Added GENERATIONS_MODE, GENERATIONS_COUNT, CONSECUTIVE_FAILURES, MAX_CONSECUTIVE_FAILURES variables
+  - Added run_experiment_generation() function that runs a single experiment cycle
+  - Added get_last_experiment_outcome() function to determine if experiment improved fitness
+  - Added generate_generation_summary() function that creates summary report at docs/experiments/generation-summary.md
+  - Multi-generation loop: for each generation, proposes hypothesis, runs experiment, records results
+  - Safety limit: stops after 3 consecutive experiment failures to prevent runaway issues
+  - Created test/multi_generation.bats with 11 new tests for multi-generation mode
+- Files changed:
+  - ralph.sh (added ~200 lines for multi-generation functionality)
+  - test/multi_generation.bats (new file with 11 tests)
+- **Learnings for future iterations:**
+  - run_experiment_generation() calls ralph.sh recursively in a subshell with --experiment flag
+  - generate_generation_summary() uses jq to extract experiment data for the metrics table
+  - Experiment ID can be extracted from hypothesis output using grep and sed
+  - The summary report includes baseline vs final comparison, all experiments run, and recommendations
+  - Safety limit uses CONSECUTIVE_FAILURES counter that resets on success, increments on failure
+---

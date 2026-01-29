@@ -1,0 +1,98 @@
+{
+  "project": "ralph-wiggum",
+  "branchName": "ralph/evolutionary-self-improvement",
+  "description": "Evolutionary Self-Improvement System - Bootstrap Ralph to improve itself through experimentation",
+  "verificationCommands": {
+    "test": "make test"
+  },
+  "userStories": [
+    {
+      "id": "EXP-001",
+      "title": "Establish Baseline Metrics",
+      "description": "As an evolutionary system, I need baseline metrics so future experiments can demonstrate improvement.",
+      "acceptanceCriteria": [
+        "experiments.json exists with schema: { baseline: {completion_rate, avg_iterations, code_quality_rate}, experiments: [] }",
+        "ralph.sh outputs metrics summary at end of run (stories completed, iterations used, pass/fail counts)",
+        "Baseline metrics recorded by running ralph on a test PRD",
+        "make test passes"
+      ],
+      "priority": 1,
+      "passes": true,
+      "notes": ""
+    },
+    {
+      "id": "EXP-002",
+      "title": "Create Experiment Recording Infrastructure",
+      "description": "As an evolutionary system, I need structured experiment recording so I can analyze past results.",
+      "acceptanceCriteria": [
+        "docs/experiments/ directory exists",
+        "docs/experiments/TEMPLATE.md exists with sections: Hypothesis, Mutation, Results, Learnings, Metrics",
+        "CLAUDE.md contains 'Experiment Recording' section with instructions for recording results",
+        "make test passes"
+      ],
+      "priority": 2,
+      "passes": true,
+      "notes": ""
+    },
+    {
+      "id": "EXP-003",
+      "title": "First Complete Evolutionary Loop",
+      "description": "As an evolutionary system, I need to prove the full cycle works: hypothesize, mutate, measure, select, record.",
+      "acceptanceCriteria": [
+        "ralph.sh accepts --experiment flag that enables experiment mode",
+        "Experiment mode creates feature branch automatically before mutations",
+        "Metrics collected at end and compared to baseline in experiments.json",
+        "Results recorded in both experiments.json and docs/experiments/EXP-003.md",
+        "make test passes"
+      ],
+      "priority": 3,
+      "passes": true,
+      "notes": ""
+    },
+    {
+      "id": "EXP-004",
+      "title": "Automated Hypothesis Generation",
+      "description": "As an evolutionary system, I need to generate my own hypotheses based on past experiment data.",
+      "acceptanceCriteria": [
+        "CLAUDE.md contains 'Hypothesis Generation' section with analysis framework",
+        "ralph.sh accepts --next-experiment flag that outputs proposed hypothesis",
+        "Hypothesis generation reads experiments.json and identifies lowest-performing metric",
+        "Proposed hypothesis is structured: metric targeted, expected improvement, specific change",
+        "make test passes"
+      ],
+      "priority": 4,
+      "passes": true,
+      "notes": ""
+    },
+    {
+      "id": "EXP-005",
+      "title": "Stagnation Detection and Big Mutations",
+      "description": "As an evolutionary system, I need escape hatches from local maxima when incremental changes stop improving fitness.",
+      "acceptanceCriteria": [
+        "experiments.json tracks stagnation_count field (increments when experiment shows no improvement)",
+        "ralph.sh detects stagnation: 3 consecutive experiments with no fitness improvement",
+        "CLAUDE.md contains 'Big Mutation Catalog' with at least 5 major structural change ideas",
+        "Stagnation triggers automatic selection from big mutation catalog",
+        "make test passes"
+      ],
+      "priority": 5,
+      "passes": true,
+      "notes": ""
+    },
+    {
+      "id": "EXP-006",
+      "title": "Self-Directing Evolution",
+      "description": "As an evolutionary system, I need to run multiple experiment generations autonomously.",
+      "acceptanceCriteria": [
+        "ralph.sh accepts --generations N flag to run N experiment cycles",
+        "Each generation: proposes hypothesis, runs experiment, records results, proposes next",
+        "Safety limits: stops after 3 consecutive experiment failures",
+        "Generates summary report at docs/experiments/generation-summary.md after completing",
+        "make test passes"
+      ],
+      "priority": 6,
+      "passes": true,
+      "notes": ""
+    }
+  ]
+}
