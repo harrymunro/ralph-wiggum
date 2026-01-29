@@ -939,6 +939,102 @@ def cmd_health(args: argparse.Namespace) -> int:
         return 0
 
 
+def get_pending_stories(stories: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    """Get pending stories sorted by priority.
+
+    A story is pending if passes=False and not marked as skipped.
+
+    Args:
+        stories: List of story dictionaries
+
+    Returns:
+        List of pending stories sorted by priority (lowest first)
+    """
+    pending = [
+        s for s in stories
+        if not s.get('passes', False) and not s.get('notes', '').startswith('Skipped:')
+    ]
+    pending.sort(key=lambda s: s.get('priority', 999))
+    return pending
+
+
+def display_interactive_stories(pending_stories: List[Dict[str, Any]]) -> None:
+    """Display a numbered list of pending stories for interactive selection.
+
+    Args:
+        pending_stories: List of pending story dictionaries
+    """
+    header("Pending Stories:")
+    info("")
+
+    try:
+        from shared.console import RICH_AVAILABLE, _get_console
+        if RICH_AVAILABLE:
+            console = _get_console()
+            for i, story in enumerate(pending_stories, 1):
+                story_id = story.get('id', 'N/A')
+                title = story.get('title', 'Untitled')
+                priority = story.get('priority', 'N/A')
+                console.print(f"  [cyan]{i}[/cyan]) [{story_id}] P{priority}: {title}")
+        else:
+            raise ImportError("Using plain text mode")
+    except Exception:
+        # Plain text fallback
+        for i, story in enumerate(pending_stories, 1):
+            story_id = story.get('id', 'N/A')
+            title = story.get('title', 'Untitled')
+            priority = story.get('priority', 'N/A')
+            info(f"  {i}) [{story_id}] P{priority}: {title}")
+
+    info("")
+    info("Enter number to run that story, 'a' to run all, or 'q' to quit:")
+
+
+def prompt_story_selection(pending_stories: List[Dict[str, Any]]) -> Tuple[List[Dict[str, Any]], bool]:
+    """Prompt user to select a story interactively.
+
+    Uses simple input() for selection (no external library required).
+
+    Args:
+        pending_stories: List of pending story dictionaries
+
+    Returns:
+        Tuple of (selected_stories, should_continue) where:
+        - selected_stories: List of stories to run (empty if user quit)
+        - should_continue: True if user selected something, False if quit
+    """
+    display_interactive_stories(pending_stories)
+
+    try:
+        user_input = input("> ").strip().lower()
+    except (EOFError, KeyboardInterrupt):
+        info("")
+        info("Selection cancelled.")
+        return [], False
+
+    if user_input == 'q':
+        info("Exiting.")
+        return [], False
+
+    if user_input == 'a':
+        info(f"Running all {len(pending_stories)} pending stories...")
+        return pending_stories, True
+
+    # Try to parse as a number
+    try:
+        selection = int(user_input)
+        if 1 <= selection <= len(pending_stories):
+            selected = pending_stories[selection - 1]
+            info(f"Selected: [{selected.get('id', 'N/A')}] {selected.get('title', 'Untitled')}")
+            return [selected], True
+        else:
+            error(f"Invalid selection: {selection}. Please enter 1-{len(pending_stories)}.")
+            return [], False
+    except ValueError:
+        error(f"Invalid input: '{user_input}'. Enter a number, 'a', or 'q'.")
+        return [], False
+
+
 def cmd_status(args: argparse.Namespace) -> int:
     """Execute the status command to show PRD status.
 
@@ -1076,6 +1172,7 @@ def cmd_run(args: argparse.Namespace) -> int:
     # Find story to run
     stories = prd.get('userStories', [])
     target_story = None
+    interactive_mode = getattr(args, 'interactive', False)
 
     if args.story:
         # Run specific story
@@ -1088,10 +1185,23 @@ def cmd_run(args: argparse.Namespace) -> int:
             err = StoryNotFoundError(args.story, available_ids)
             display_error(err)
             return 1
+    elif interactive_mode:
+        # Interactive mode - show pending stories and let user select
+        pending_stories = get_pending_stories(stories)
+        if not pending_stories:
+            success("All stories are complete!")
+            return 0
+
+        selected_stories, should_continue = prompt_story_selection(pending_stories)
+        if not should_continue:
+            return 0
+
+        # For now, run the first selected story
+        # (Full implementation would run all selected for 'a' option)
+        target_story = selected_stories[0]
     else:
         # Find next pending story by priority
-        pending = [s for s in stories if not s.get('passes', False) and not s.get('notes', '').startswith('Skipped:')]
-        pending.sort(key=lambda s: s.get('priority', 999))
+        pending = get_pending_stories(stories)
         if pending:
             target_story = pending[0]
 
@@ -1205,6 +1315,11 @@ def main() -> int:
         '--debug',
         action='store_true',
         help='Enable debug output with full prompts, file paths, and environment info (includes verbose)'
+    )
+    run_parser.add_argument(
+        '-i', '--interactive',
+        action='store_true',
+        help='Interactively select which story to run'
     )
     run_parser.set_defaults(func=cmd_run)
 

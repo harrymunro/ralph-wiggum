@@ -1711,3 +1711,343 @@ class TestHealthCommandParsing:
                 main()
                 args = mock_health.call_args[0][0]
                 assert args.prd == 'custom/prd.json'
+
+
+class TestInteractiveFlag:
+    """Tests for the --interactive/-i flag."""
+
+    def test_interactive_flag_long_form_parsed(self):
+        """Test that --interactive flag is recognized by the parser."""
+        sys.path.insert(0, str(__file__).rsplit('/tests/', 1)[0])
+        from v_ralph import main
+
+        with patch('sys.argv', ['v_ralph', 'run', '--interactive', '--dry-run']):
+            with patch('v_ralph.cmd_run') as mock_run:
+                mock_run.return_value = 0
+                main()
+                args = mock_run.call_args[0][0]
+                assert args.interactive is True
+
+    def test_interactive_flag_short_form_parsed(self):
+        """Test that -i flag is recognized by the parser."""
+        sys.path.insert(0, str(__file__).rsplit('/tests/', 1)[0])
+        from v_ralph import main
+
+        with patch('sys.argv', ['v_ralph', 'run', '-i', '--dry-run']):
+            with patch('v_ralph.cmd_run') as mock_run:
+                mock_run.return_value = 0
+                main()
+                args = mock_run.call_args[0][0]
+                assert args.interactive is True
+
+    def test_interactive_flag_default_is_false(self):
+        """Test that interactive flag defaults to False when not provided."""
+        sys.path.insert(0, str(__file__).rsplit('/tests/', 1)[0])
+        from v_ralph import main
+
+        with patch('sys.argv', ['v_ralph', 'run', '--dry-run']):
+            with patch('v_ralph.cmd_run') as mock_run:
+                mock_run.return_value = 0
+                main()
+                args = mock_run.call_args[0][0]
+                assert args.interactive is False
+
+    def test_interactive_flag_in_help_output(self):
+        """Test that --interactive/-i appears in run --help output."""
+        sys.path.insert(0, str(__file__).rsplit('/tests/', 1)[0])
+        from v_ralph import main
+
+        with patch('sys.argv', ['v_ralph', 'run', '--help']):
+            with pytest.raises(SystemExit) as exc_info:
+                with patch('sys.stdout.write') as mock_write:
+                    main()
+            # Help exits with code 0
+            assert exc_info.value.code == 0
+
+
+class TestGetPendingStories:
+    """Tests for the get_pending_stories function."""
+
+    def test_get_pending_stories_filters_passed(self):
+        """Test that passed stories are filtered out."""
+        sys.path.insert(0, str(__file__).rsplit('/tests/', 1)[0])
+        from v_ralph import get_pending_stories
+
+        stories = [
+            {"id": "US-001", "passes": True, "priority": 1},
+            {"id": "US-002", "passes": False, "priority": 2},
+            {"id": "US-003", "passes": True, "priority": 3},
+        ]
+        pending = get_pending_stories(stories)
+        assert len(pending) == 1
+        assert pending[0]["id"] == "US-002"
+
+    def test_get_pending_stories_filters_skipped(self):
+        """Test that skipped stories are filtered out."""
+        sys.path.insert(0, str(__file__).rsplit('/tests/', 1)[0])
+        from v_ralph import get_pending_stories
+
+        stories = [
+            {"id": "US-001", "passes": False, "priority": 1, "notes": "Skipped: Reason"},
+            {"id": "US-002", "passes": False, "priority": 2, "notes": ""},
+        ]
+        pending = get_pending_stories(stories)
+        assert len(pending) == 1
+        assert pending[0]["id"] == "US-002"
+
+    def test_get_pending_stories_sorted_by_priority(self):
+        """Test that pending stories are sorted by priority."""
+        sys.path.insert(0, str(__file__).rsplit('/tests/', 1)[0])
+        from v_ralph import get_pending_stories
+
+        stories = [
+            {"id": "US-001", "passes": False, "priority": 5},
+            {"id": "US-002", "passes": False, "priority": 1},
+            {"id": "US-003", "passes": False, "priority": 3},
+        ]
+        pending = get_pending_stories(stories)
+        assert len(pending) == 3
+        assert pending[0]["id"] == "US-002"  # priority 1
+        assert pending[1]["id"] == "US-003"  # priority 3
+        assert pending[2]["id"] == "US-001"  # priority 5
+
+    def test_get_pending_stories_empty_list(self):
+        """Test with empty stories list."""
+        sys.path.insert(0, str(__file__).rsplit('/tests/', 1)[0])
+        from v_ralph import get_pending_stories
+
+        pending = get_pending_stories([])
+        assert pending == []
+
+    def test_get_pending_stories_all_complete(self):
+        """Test when all stories are complete."""
+        sys.path.insert(0, str(__file__).rsplit('/tests/', 1)[0])
+        from v_ralph import get_pending_stories
+
+        stories = [
+            {"id": "US-001", "passes": True, "priority": 1},
+            {"id": "US-002", "passes": True, "priority": 2},
+        ]
+        pending = get_pending_stories(stories)
+        assert pending == []
+
+
+class TestDisplayInteractiveStories:
+    """Tests for the display_interactive_stories function."""
+
+    def test_display_interactive_stories_shows_numbered_list(self):
+        """Test that stories are displayed with numbers."""
+        sys.path.insert(0, str(__file__).rsplit('/tests/', 1)[0])
+        from v_ralph import display_interactive_stories
+
+        stories = [
+            {"id": "US-001", "title": "First Story", "priority": 1},
+            {"id": "US-002", "title": "Second Story", "priority": 2},
+        ]
+
+        with patch('v_ralph.header') as mock_header:
+            with patch('v_ralph.info') as mock_info:
+                display_interactive_stories(stories)
+                mock_header.assert_called_with("Pending Stories:")
+                # Check that info was called multiple times
+                assert mock_info.call_count >= 3
+
+    def test_display_interactive_stories_shows_instructions(self):
+        """Test that instructions are shown."""
+        sys.path.insert(0, str(__file__).rsplit('/tests/', 1)[0])
+        from v_ralph import display_interactive_stories
+
+        stories = [{"id": "US-001", "title": "Story", "priority": 1}]
+
+        with patch('v_ralph.header'):
+            with patch('v_ralph.info') as mock_info:
+                display_interactive_stories(stories)
+                # Last call should be the instructions
+                calls = [str(call) for call in mock_info.call_args_list]
+                instructions_shown = any("'a'" in str(call) and "'q'" in str(call) for call in calls)
+                assert instructions_shown
+
+
+class TestPromptStorySelection:
+    """Tests for the prompt_story_selection function."""
+
+    def test_prompt_story_selection_quit(self):
+        """Test that 'q' returns empty list and False."""
+        sys.path.insert(0, str(__file__).rsplit('/tests/', 1)[0])
+        from v_ralph import prompt_story_selection
+
+        stories = [{"id": "US-001", "title": "Story", "priority": 1}]
+
+        with patch('v_ralph.display_interactive_stories'):
+            with patch('builtins.input', return_value='q'):
+                with patch('v_ralph.info'):
+                    selected, should_continue = prompt_story_selection(stories)
+                    assert selected == []
+                    assert should_continue is False
+
+    def test_prompt_story_selection_all(self):
+        """Test that 'a' returns all stories and True."""
+        sys.path.insert(0, str(__file__).rsplit('/tests/', 1)[0])
+        from v_ralph import prompt_story_selection
+
+        stories = [
+            {"id": "US-001", "title": "Story 1", "priority": 1},
+            {"id": "US-002", "title": "Story 2", "priority": 2},
+        ]
+
+        with patch('v_ralph.display_interactive_stories'):
+            with patch('builtins.input', return_value='a'):
+                with patch('v_ralph.info'):
+                    selected, should_continue = prompt_story_selection(stories)
+                    assert len(selected) == 2
+                    assert should_continue is True
+
+    def test_prompt_story_selection_valid_number(self):
+        """Test that valid number selects correct story."""
+        sys.path.insert(0, str(__file__).rsplit('/tests/', 1)[0])
+        from v_ralph import prompt_story_selection
+
+        stories = [
+            {"id": "US-001", "title": "Story 1", "priority": 1},
+            {"id": "US-002", "title": "Story 2", "priority": 2},
+        ]
+
+        with patch('v_ralph.display_interactive_stories'):
+            with patch('builtins.input', return_value='2'):
+                with patch('v_ralph.info'):
+                    selected, should_continue = prompt_story_selection(stories)
+                    assert len(selected) == 1
+                    assert selected[0]["id"] == "US-002"
+                    assert should_continue is True
+
+    def test_prompt_story_selection_invalid_number_too_high(self):
+        """Test that invalid number (too high) returns empty and False."""
+        sys.path.insert(0, str(__file__).rsplit('/tests/', 1)[0])
+        from v_ralph import prompt_story_selection
+
+        stories = [{"id": "US-001", "title": "Story", "priority": 1}]
+
+        with patch('v_ralph.display_interactive_stories'):
+            with patch('builtins.input', return_value='5'):
+                with patch('v_ralph.error'):
+                    selected, should_continue = prompt_story_selection(stories)
+                    assert selected == []
+                    assert should_continue is False
+
+    def test_prompt_story_selection_invalid_input(self):
+        """Test that invalid input returns empty and False."""
+        sys.path.insert(0, str(__file__).rsplit('/tests/', 1)[0])
+        from v_ralph import prompt_story_selection
+
+        stories = [{"id": "US-001", "title": "Story", "priority": 1}]
+
+        with patch('v_ralph.display_interactive_stories'):
+            with patch('builtins.input', return_value='xyz'):
+                with patch('v_ralph.error'):
+                    selected, should_continue = prompt_story_selection(stories)
+                    assert selected == []
+                    assert should_continue is False
+
+    def test_prompt_story_selection_eof_error(self):
+        """Test that EOFError is handled gracefully."""
+        sys.path.insert(0, str(__file__).rsplit('/tests/', 1)[0])
+        from v_ralph import prompt_story_selection
+
+        stories = [{"id": "US-001", "title": "Story", "priority": 1}]
+
+        with patch('v_ralph.display_interactive_stories'):
+            with patch('builtins.input', side_effect=EOFError):
+                with patch('v_ralph.info'):
+                    selected, should_continue = prompt_story_selection(stories)
+                    assert selected == []
+                    assert should_continue is False
+
+    def test_prompt_story_selection_keyboard_interrupt(self):
+        """Test that KeyboardInterrupt is handled gracefully."""
+        sys.path.insert(0, str(__file__).rsplit('/tests/', 1)[0])
+        from v_ralph import prompt_story_selection
+
+        stories = [{"id": "US-001", "title": "Story", "priority": 1}]
+
+        with patch('v_ralph.display_interactive_stories'):
+            with patch('builtins.input', side_effect=KeyboardInterrupt):
+                with patch('v_ralph.info'):
+                    selected, should_continue = prompt_story_selection(stories)
+                    assert selected == []
+                    assert should_continue is False
+
+    def test_prompt_story_selection_case_insensitive(self):
+        """Test that 'Q' and 'A' work (case insensitive)."""
+        sys.path.insert(0, str(__file__).rsplit('/tests/', 1)[0])
+        from v_ralph import prompt_story_selection
+
+        stories = [{"id": "US-001", "title": "Story", "priority": 1}]
+
+        with patch('v_ralph.display_interactive_stories'):
+            with patch('builtins.input', return_value='Q'):
+                with patch('v_ralph.info'):
+                    selected, should_continue = prompt_story_selection(stories)
+                    assert should_continue is False
+
+
+class TestInteractiveModeIntegration:
+    """Integration tests for interactive mode in cmd_run."""
+
+    def test_cmd_run_interactive_no_pending_stories(self, tmp_path):
+        """Test interactive mode when all stories are complete."""
+        sys.path.insert(0, str(__file__).rsplit('/tests/', 1)[0])
+        from v_ralph import cmd_run
+
+        # Create PRD with all stories passing
+        prd_file = tmp_path / "prd.json"
+        prd_file.write_text(json.dumps({
+            "project": "Test Project",
+            "userStories": [
+                {"id": "US-001", "title": "Story 1", "passes": True},
+            ]
+        }))
+
+        args = argparse.Namespace(
+            prd=str(prd_file),
+            dry_run=False,
+            story=None,
+            max_retries=3,
+            verbose=False,
+            debug=False,
+            interactive=True
+        )
+
+        with patch('v_ralph.success') as mock_success:
+            exit_code = cmd_run(args)
+            mock_success.assert_called_with("All stories are complete!")
+            assert exit_code == 0
+
+    def test_cmd_run_interactive_quit(self, tmp_path):
+        """Test interactive mode when user quits."""
+        sys.path.insert(0, str(__file__).rsplit('/tests/', 1)[0])
+        from v_ralph import cmd_run
+
+        # Create PRD with pending story
+        prd_file = tmp_path / "prd.json"
+        prd_file.write_text(json.dumps({
+            "project": "Test Project",
+            "userStories": [
+                {"id": "US-001", "title": "Story 1", "priority": 1, "passes": False},
+            ]
+        }))
+
+        args = argparse.Namespace(
+            prd=str(prd_file),
+            dry_run=False,
+            story=None,
+            max_retries=3,
+            verbose=False,
+            debug=False,
+            interactive=True
+        )
+
+        with patch('v_ralph.display_interactive_stories'):
+            with patch('builtins.input', return_value='q'):
+                with patch('v_ralph.info'):
+                    exit_code = cmd_run(args)
+                    assert exit_code == 0
