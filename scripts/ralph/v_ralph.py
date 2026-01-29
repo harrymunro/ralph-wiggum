@@ -16,6 +16,58 @@ from shared.console import success, error, warning, info, header, progress_bar
 from shared.errors import PRDNotFoundError, StoryNotFoundError, RalphError
 
 
+def truncate_text(text: str, max_length: int = 500) -> str:
+    """Truncate text to a maximum length, adding ellipsis if truncated.
+
+    Args:
+        text: Text to truncate
+        max_length: Maximum length (default: 500)
+
+    Returns:
+        Truncated text with ellipsis if original was longer
+    """
+    if len(text) <= max_length:
+        return text
+    return text[:max_length] + "..."
+
+
+def verbose_log(message: str, verbose: bool) -> None:
+    """Log a message only if verbose mode is enabled.
+
+    Args:
+        message: Message to log
+        verbose: Whether verbose mode is enabled
+    """
+    if verbose:
+        info(f"[VERBOSE] {message}")
+
+
+def verbose_prompt(prompt: str, verbose: bool) -> None:
+    """Log a prompt in verbose mode, truncated to 500 chars.
+
+    Args:
+        prompt: The prompt text to log
+        verbose: Whether verbose mode is enabled
+    """
+    if verbose:
+        truncated = truncate_text(prompt, 500)
+        info(f"[VERBOSE] Prompt ({len(prompt)} chars, showing first 500):")
+        info(f"  {truncated}")
+
+
+def verbose_validation_output(output: str, verbose: bool) -> None:
+    """Log full validation command output in verbose mode.
+
+    Args:
+        output: The validation command output
+        verbose: Whether verbose mode is enabled
+    """
+    if verbose:
+        info("[VERBOSE] Validation output:")
+        for line in output.split('\n'):
+            info(f"  {line}")
+
+
 def display_error(err: RalphError) -> None:
     """Display an error with its suggestion in a consistent format.
 
@@ -251,8 +303,17 @@ def cmd_run(args: argparse.Namespace) -> int:
 
     story_id = target_story.get('id', 'N/A')
     story_title = target_story.get('title', 'Untitled')
+    verbose = getattr(args, 'verbose', False)
 
     header(f"Running story: [{story_id}] {story_title}")
+
+    # Verbose mode shows additional details
+    verbose_log(f"Story priority: {target_story.get('priority', 'N/A')}", verbose)
+    verbose_log(f"Max retries: {args.max_retries}", verbose)
+
+    # Placeholder for execution - in full implementation, these would be used:
+    # verbose_prompt(executor_prompt, verbose) - to show truncated prompts
+    # verbose_validation_output(validation_result, verbose) - to show full validation output
     info("(Execution would happen here - this is a placeholder)")
 
     return 0
@@ -296,6 +357,11 @@ def main() -> int:
         type=int,
         default=3,
         help='Maximum retry attempts per story (default: 3)'
+    )
+    run_parser.add_argument(
+        '-v', '--verbose',
+        action='store_true',
+        help='Enable verbose output with truncated prompts and full validation output'
     )
     run_parser.set_defaults(func=cmd_run)
 
