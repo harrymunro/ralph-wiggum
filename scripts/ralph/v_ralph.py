@@ -10,29 +10,43 @@ import json
 import os
 import sys
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict
 
 from shared.console import success, error, warning, info, header, progress_bar
+from shared.errors import PRDNotFoundError, StoryNotFoundError, RalphError
 
 
-def load_prd(prd_path: str) -> Optional[Dict[str, Any]]:
+def display_error(err: RalphError) -> None:
+    """Display an error with its suggestion in a consistent format.
+
+    Args:
+        err: A RalphError instance with message and suggestion
+    """
+    error(f"Error: {err}")
+    if err.suggestion:
+        info(f"Suggestion: {err.suggestion}")
+
+
+def load_prd(prd_path: str) -> Dict[str, Any]:
     """Load and parse a PRD JSON file.
 
     Args:
         prd_path: Path to the PRD file
 
     Returns:
-        Parsed PRD dictionary or None if loading fails
+        Parsed PRD dictionary
+
+    Raises:
+        PRDNotFoundError: If the PRD file is not found
+        ValueError: If the PRD file contains invalid JSON
     """
     try:
         with open(prd_path, 'r') as f:
             return json.load(f)
     except FileNotFoundError:
-        error(f"PRD file not found: {prd_path}")
-        return None
+        raise PRDNotFoundError(prd_path)
     except json.JSONDecodeError as e:
-        error(f"Invalid JSON in PRD file: {e}")
-        return None
+        raise ValueError(f"Invalid JSON in PRD file: {e}")
 
 
 def save_prd(prd_path: str, prd_data: Dict[str, Any]) -> bool:
@@ -99,9 +113,14 @@ def cmd_status(args: argparse.Namespace) -> int:
         Exit code (0 for success, 1 for error)
     """
     prd_path = args.prd
-    prd = load_prd(prd_path)
-
-    if prd is None:
+    try:
+        prd = load_prd(prd_path)
+    except PRDNotFoundError as e:
+        display_error(e)
+        return 1
+    except ValueError as e:
+        error(f"Error: {e}")
+        info("Suggestion: Check your PRD file for valid JSON syntax. Use a JSON validator tool.")
         return 1
 
     # Print header
@@ -181,9 +200,14 @@ def cmd_run(args: argparse.Namespace) -> int:
         Exit code (0 for success, 1 for error, 2 for escalation)
     """
     prd_path = args.prd
-    prd = load_prd(prd_path)
-
-    if prd is None:
+    try:
+        prd = load_prd(prd_path)
+    except PRDNotFoundError as e:
+        display_error(e)
+        return 1
+    except ValueError as e:
+        error(f"Error: {e}")
+        info("Suggestion: Check your PRD file for valid JSON syntax. Use a JSON validator tool.")
         return 1
 
     if args.dry_run:
@@ -210,10 +234,9 @@ def cmd_run(args: argparse.Namespace) -> int:
                 target_story = story
                 break
         if target_story is None:
-            error(f"Story not found: {args.story}")
-            info("Available stories:")
-            for story in stories:
-                info(f"  - {story.get('id')}: {story.get('title')}")
+            available_ids = [s.get('id', '') for s in stories if s.get('id')]
+            err = StoryNotFoundError(args.story, available_ids)
+            display_error(err)
             return 1
     else:
         # Find next pending story by priority
