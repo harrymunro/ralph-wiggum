@@ -4,6 +4,9 @@ Provides colored terminal output when the 'rich' library is available,
 with a plain-text fallback when it is not installed.
 """
 
+import sys
+import threading
+import time
 from typing import Optional
 
 # Try to import rich, fall back to plain text if not available
@@ -12,6 +15,8 @@ try:
     from rich.style import Style
     from rich.panel import Panel
     from rich.text import Text
+    from rich.spinner import Spinner as RichSpinner
+    from rich.live import Live
     RICH_AVAILABLE = True
 except ImportError:
     RICH_AVAILABLE = False
@@ -95,3 +100,78 @@ def header(message: str) -> None:
             console.print(f"[bold white]{message}[/bold white]")
     else:
         print(f"=== {message} ===")
+
+
+class Spinner:
+    """A context manager for showing a spinner during long-running operations.
+
+    When rich is available, displays an animated spinner. When rich is not
+    available, prints dots at regular intervals to show progress.
+
+    Usage:
+        with Spinner('Loading...'):
+            # do something slow
+            pass
+    """
+
+    def __init__(self, message: str = "Working...", dot_interval: float = 0.5):
+        """Initialize the spinner.
+
+        Args:
+            message: The message to display alongside the spinner
+            dot_interval: Interval in seconds between dots in plain-text mode
+        """
+        self.message = message
+        self.dot_interval = dot_interval
+        self._live: Optional["Live"] = None
+        self._stop_event: Optional[threading.Event] = None
+        self._dot_thread: Optional[threading.Thread] = None
+
+    def __enter__(self) -> "Spinner":
+        """Start the spinner when entering the context."""
+        if RICH_AVAILABLE:
+            console = _get_console()
+            if console:
+                spinner = RichSpinner("dots", text=self.message)
+                self._live = Live(spinner, console=console, refresh_per_second=10)
+                self._live.__enter__()
+        else:
+            # Plain-text mode: print message and start dot printing thread
+            sys.stdout.write(self.message)
+            sys.stdout.flush()
+            self._stop_event = threading.Event()
+            self._dot_thread = threading.Thread(target=self._print_dots, daemon=True)
+            self._dot_thread.start()
+        return self
+
+    def __exit__(self, exc_type, exc_val, exc_tb) -> None:
+        """Stop the spinner when exiting the context."""
+        if RICH_AVAILABLE and self._live:
+            self._live.__exit__(exc_type, exc_val, exc_tb)
+        elif self._stop_event and self._dot_thread:
+            # Stop the dot printing thread
+            self._stop_event.set()
+            self._dot_thread.join(timeout=1.0)
+            # Print newline to complete the line
+            sys.stdout.write("\n")
+            sys.stdout.flush()
+
+    def _print_dots(self) -> None:
+        """Print dots at regular intervals in plain-text mode."""
+        while self._stop_event and not self._stop_event.is_set():
+            self._stop_event.wait(timeout=self.dot_interval)
+            if not self._stop_event.is_set():
+                sys.stdout.write(".")
+                sys.stdout.flush()
+
+    def update(self, message: str) -> None:
+        """Update the spinner message.
+
+        Args:
+            message: The new message to display
+        """
+        self.message = message
+        if RICH_AVAILABLE and self._live:
+            spinner = RichSpinner("dots", text=message)
+            self._live.update(spinner)
+        # In plain-text mode, we don't update the message mid-spin

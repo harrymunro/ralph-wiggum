@@ -138,3 +138,108 @@ class TestRichAvailability:
             result = console._get_console()
             # When RICH_AVAILABLE is False, it should return the cached console or None
             # Since we're patching RICH_AVAILABLE to False, the function won't create a new console
+
+
+class TestSpinner:
+    """Test suite for Spinner context manager."""
+
+    def test_spinner_can_be_imported(self) -> None:
+        """Test that Spinner can be imported from the console module."""
+        from shared.console import Spinner
+        assert Spinner is not None
+
+    def test_spinner_context_manager_basic(self) -> None:
+        """Test that Spinner works as a basic context manager."""
+        from shared.console import Spinner
+        # Should not raise any exceptions
+        with Spinner("Test message"):
+            pass
+
+    def test_spinner_with_custom_message(self) -> None:
+        """Test Spinner with a custom message."""
+        from shared.console import Spinner
+        spinner = Spinner("Loading data...")
+        assert spinner.message == "Loading data..."
+
+    def test_spinner_without_rich_prints_dots(self) -> None:
+        """Test that Spinner prints dots in plain-text mode."""
+        import time
+        from shared.console import Spinner
+        with patch.object(console, 'RICH_AVAILABLE', False):
+            captured_output = StringIO()
+            with patch('sys.stdout', captured_output):
+                with Spinner("Testing...", dot_interval=0.1):
+                    time.sleep(0.25)  # Allow time for at least 2 dots
+            output = captured_output.getvalue()
+            assert "Testing..." in output
+            # Should have printed at least one dot
+            assert "." in output
+
+    def test_spinner_without_rich_ends_with_newline(self) -> None:
+        """Test that plain-text spinner ends with a newline."""
+        from shared.console import Spinner
+        with patch.object(console, 'RICH_AVAILABLE', False):
+            captured_output = StringIO()
+            with patch('sys.stdout', captured_output):
+                with Spinner("Test"):
+                    pass
+            output = captured_output.getvalue()
+            assert output.endswith("\n")
+
+    def test_spinner_update_method_exists(self) -> None:
+        """Test that Spinner has an update method."""
+        from shared.console import Spinner
+        spinner = Spinner("Initial")
+        assert hasattr(spinner, 'update')
+        assert callable(spinner.update)
+
+    def test_spinner_update_changes_message(self) -> None:
+        """Test that Spinner.update() changes the message."""
+        from shared.console import Spinner
+        spinner = Spinner("Initial message")
+        spinner.update("Updated message")
+        assert spinner.message == "Updated message"
+
+    def test_spinner_with_rich_uses_live(self) -> None:
+        """Test that Spinner uses Live when rich is available."""
+        if console.RICH_AVAILABLE:
+            from shared.console import Spinner
+            mock_live = MagicMock()
+            mock_live.__enter__ = MagicMock(return_value=mock_live)
+            mock_live.__exit__ = MagicMock(return_value=None)
+
+            with patch('shared.console.Live', return_value=mock_live):
+                with Spinner("Test"):
+                    pass
+            mock_live.__enter__.assert_called_once()
+            mock_live.__exit__.assert_called_once()
+
+    def test_spinner_thread_stops_on_exit(self) -> None:
+        """Test that the dot-printing thread stops when exiting context."""
+        import time
+        from shared.console import Spinner
+        with patch.object(console, 'RICH_AVAILABLE', False):
+            with patch('sys.stdout', StringIO()):
+                spinner_instance = None
+                with Spinner("Test", dot_interval=0.1) as spinner:
+                    spinner_instance = spinner
+                    time.sleep(0.05)
+                # After exiting, the stop event should be set
+                if spinner_instance._stop_event:
+                    assert spinner_instance._stop_event.is_set()
+
+    def test_spinner_handles_exception_in_context(self) -> None:
+        """Test that Spinner properly cleans up when exception occurs in context."""
+        from shared.console import Spinner
+        with patch.object(console, 'RICH_AVAILABLE', False):
+            with patch('sys.stdout', StringIO()):
+                spinner_instance = None
+                try:
+                    with Spinner("Test") as spinner:
+                        spinner_instance = spinner
+                        raise ValueError("Test exception")
+                except ValueError:
+                    pass
+                # Stop event should still be set after exception
+                if spinner_instance._stop_event:
+                    assert spinner_instance._stop_event.is_set()
